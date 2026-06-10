@@ -1,0 +1,3 @@
+<template>
+    <h1>Dossiers</h1>
+</template>
