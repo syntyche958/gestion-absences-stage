@@ -1,5 +1,5 @@
 const pool = require('../config/db');
-
+const ajoutHostorique = require('../services/historique.service');
 //creer une convocation
 const createConvocation = async (req, res) =>{
     try {
@@ -160,6 +160,15 @@ const updateConvocation = async (req, res) =>{
         });
     }
 
+    const convocationModiffee = result.rows[0]
+
+    await ajoutHostorique(
+        convocationModiffee.id_dossier,
+        convocationModiffee.id_utilisateur,
+        'Modification_convocation',
+        `Convocation mise à jour avec le statut ${convocationModiffee.statut_convoc}.`
+    );
+
     res.status(200).json({
         message: 'Convocation mise à jour',
         convocation: result.rows[0]
@@ -202,6 +211,7 @@ const deleteConvocation = async (req, res) => {
         });
     }
 };
+
 
 module.exports = {
     createConvocation,

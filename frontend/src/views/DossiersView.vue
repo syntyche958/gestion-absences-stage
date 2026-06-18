@@ -7,7 +7,7 @@ import InputText from 'primevue/inputtext'
 import Select from 'primevue/select'
 import Button from 'primevue/button'
 import Tag from 'primevue/tag'
-import { Dialog } from 'primevue/dialog'
+import Dialog  from 'primevue/dialog'
 
 import api from '../services/api'
 
@@ -15,9 +15,10 @@ const dossiers = ref([])
 const search = ref('')
 const semestre = ref(null)
 const groupe = ref(null)
-const dossiers = ref([])
+
 const showDialog = ref(false)
 const selectedStudent = ref(null)
+const absencesEtudiant = ref([])
 
 const semestres = ['S1', 'S2', 'S3', 'S4', 'S5', 'S6']
 const groupes = ['BUT1-A', 'BUT1-C', 'BUT2-A', 'BUT2-B', 'BUT3-A']
@@ -75,9 +76,17 @@ const getInitiales = (dossier) => {
   return `${dossier.nom_etudiant?.[0] || ''}${dossier.prenom_etudiant?.[0] || ''}`
 }
 
-const voirEtudiant = (etudiant) => {
+const voirEtudiant = async (etudiant) => {
     selectedStudent.value = etudiant
     showDialog.value = true
+
+    const response = await api.get(`/absences/etudiant/${etudiant.id_etudiant}`, {
+        headers: {
+            Authorization: `Bearer ${localStorage.getItem('token')}`
+        }
+    })
+
+    absencesEtudiant.value =response.data
 }
 
 onMounted(loadDossiers)
@@ -170,31 +179,85 @@ onMounted(loadDossiers)
       <Column field="total_absences" header="Total absences" />
 
       <Column header="Actions">
-        <template #body>
-          <Button
-            icon="pi pi-eye"
-            rounded
-            text
-            @click="voirEtudiant(slotProps.data)"
-          />
-        </template>
-        <Dialog
-            v-model:visible="showDialog"
-            modal
-            header="Fiche étudiant"
-            :sytle="{width: '500px'}"
-        >
-            <div v-if="selectedStudent">
-                <p>
-                    <strong>Nom :</strong>
-                    {{ selectedStudent.nom_etudiant }}
-                </p>
-            </div>
-
-        </Dialog>
-      </Column>
+            <template #body="slotProps">
+                <Button
+                    icon="pi pi-eye"
+                    rounded
+                    text
+                    @click="voirEtudiant(slotProps.data)"
+                />
+            </template>
+        </Column>
     </DataTable>
   </div>
+   <Dialog
+        v-model:visible="showDialog"
+        modal
+        header="Fiche étudiant"
+        :sytle="{width: '900px'}"
+    >
+        <div v-if="selectedStudent" class="student-detail">
+            <div class="detail-avatar">
+                {{ getInitiales(selectedStudent) }}
+            </div>
+            <h2>
+                {{ selectedStudent.nom_etudiant }}
+                {{ selectedStudent.prenom_etudiant }}
+            </h2>
+
+            <Tag
+                :value="getStatut(Number(selectedStudent.total_absences))"
+                :severity="getSeverity(getStatut(Number(selectedStudent.total_absences)))"
+            />
+
+           <div class="detail-grid">
+                <div>
+                    <strong>Groupe</strong>
+                    <p>{{ selectedStudent.groupe_td }}</p>
+                </div>
+
+                <div>
+                    <strong>TP</strong>
+                    <p>{{ selectedStudent.groupe_tp }}</p>
+                </div>
+
+                <div>
+                    <strong>Semestre</strong>
+                    <p>{{ selectedStudent.semestre }}</p>
+                </div>
+
+                <div>
+                    <strong>Total absences</strong>
+                    <p>{{ selectedStudent.total_absences }}</p>
+                </div>
+            </div>
+        </div>
+
+        <h3>Liste des absences</h3>
+        <DataTable
+            :value="absencesEtudiant"
+            :rows="5"
+            paginator
+            stripedRows
+        >
+            <Column header="Date">
+                <template #body="slotProps">
+                    {{ formatDate(slotProps.data.date_absence) }}
+                </template>
+            </Column>
+
+            <Column header="Justifiée">
+                <template #body="slotProps">
+                    <Tag
+                        :value="slotProps.data.justifiee ? 'Oui' : 'Non'"
+                        :severity="slotProps.data.justifiee ? 'success' : 'danger'"
+                    />
+                </template>
+            </Column>
+
+            <Column field="motif" header="Motif"/>
+        </DataTable>
+    </Dialog>
 </template>
 
 <style scoped>
@@ -286,5 +349,46 @@ onMounted(loadDossiers)
 :deep(.p-tag) {
   border-radius: 999px;
   padding: 6px 12px;
+}
+
+.student-detail {
+  text-align: center;
+}
+
+.detail-avatar {
+  width: 70px;
+  height: 70px;
+  margin: 0 auto 12px;
+  border-radius: 50%;
+  background: #dbeafe;
+  color: #0b63ff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 700;
+}
+
+.detail-grid {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 20px;
+    margin-top: 25px;
+}
+
+.detail-grid div {
+    background: #f8fafc;
+    padding: 15px;
+    border-radius: 12px;
+}
+
+.detail-grid strong {
+    color: #64748b;
+    font-size: 14px;
+}
+
+.detail-grid p {
+    margin-top: 8px;
+    font-size: 18px;
+    font-weight: 600;
 }
 </style>

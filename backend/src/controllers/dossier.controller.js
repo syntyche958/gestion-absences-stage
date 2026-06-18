@@ -7,6 +7,7 @@ const getAllDossiers = async (req, res) => {
             `SELECT
                 d.*,
                 e.nom_etudiant,
+                e.prenom_etudiant,
                 e.groupe_td,
                 e.groupe_tp,
                 e.semestre

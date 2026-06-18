@@ -76,6 +76,33 @@ const getActionById = async (req, res) => {
     }
 };
 
+const getActionsByDossier = async (req, res) => {
+    try {
+
+        const { id } = req.params;
+
+        const result = await pool.query(
+            `
+            SELECT *
+            FROM "ActionAdministrative"
+            WHERE id_dossier = $1
+            ORDER BY "dateEnvoi" DESC
+            `,
+            [id]
+        );
+
+        res.status(200).json(result.rows);
+
+    } catch(error) {
+
+        console.error(error);
+
+        res.status(500).json({
+            message: 'Erreur serveur'
+        });
+    }
+};
+
 const updateAction = async (req, res) =>{
     try {
         const { id } = req.params;
@@ -131,5 +158,6 @@ const updateAction = async (req, res) =>{
 module.exports = {
     getAllActions,
     getActionById,
+    getActionsByDossier,
     updateAction
 };

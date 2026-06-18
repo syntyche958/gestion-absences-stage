@@ -87,7 +87,65 @@ const getAllAbsences = async (req,res) => {
     }
 };
 
+const getSuiviAbsences = async (req, res) => {
+    try {
+        const result = await pool.query(
+            `SELECT
+                e.id_etudiant,
+                e.nom_etudiant,
+                e.prenom_etudiant,
+                e.groupe_td,
+                e.groupe_tp,
+                e.semestre,
+                COUNT(a.id_absence) AS total_absences
+            FROM "Etudiant" e
+            LEFT JOIN "Absence" a
+            ON e.id_etudiant = a.id_etudiant
+            GROUP BY
+                e.id_etudiant,
+                e.nom_etudiant,
+                e.prenom_etudiant,
+                e.groupe_td,
+                e.groupe_tp,
+                e.semestre
+            ORDER BY total_absences DESC`
+        );
+
+        res.status(200).json(result.rows);
+
+    } catch (error) {
+        console.error(error);
+        res.status(500).json({
+            message: 'Erreur serveur'
+        });
+    }
+};
+
+const getAbsencesByEtudiant = async (req, res) => {
+    try {
+        const { id } = req.params;
+
+        const result = await pool.query(
+            `SELECT *
+             FROM "Absence"
+             WHERE id_etudiant = $1
+             ORDER BY date_absence DESC`,
+            [id]
+        );
+
+        res.status(200).json(result.rows);
+
+    } catch (error) {
+        console.error(error);
+        res.status(500).json({
+            message: 'Erreur serveur'
+        });
+    }
+};
+
 module.exports = {
     createAbsence,
-    getAllAbsences
+    getAllAbsences,
+    getSuiviAbsences,
+    getAbsencesByEtudiant
 };
