@@ -71,13 +71,13 @@ const verifierSeuils = async (id_etudiant) => {
         let moyenEnvoi = null;
 
         if (niveauAlerte === 'RAPPEL') {
-            typeAction = "Rappel d'assiduité";
-            moyenEnvoi = 'Mail';
+            typeAction = "Rappel a l'obligation d'assiduité";
+            moyenEnvoi = 'Mail avec courier au préalable';
         } else if (niveauAlerte === 'AVERTISSEMENT') {
             typeAction = "Avertissement";
-            moyenEnvoi = 'Courrier recommandé ou remise en main propre';
+            moyenEnvoi = 'Lettre recommandée avec avis de reception ou remise en main propre';
         } else if (niveauAlerte === 'SANCTION') {
-            typeAction = "Convocation direction / sanction à traiter";
+            typeAction = "Convocation direction , les moyennes des UE ne seront pas calculées";
             moyenEnvoi = 'Lettre recommandée avec accusé de réception';
         }
 
@@ -143,22 +143,22 @@ const verifierSeuils = async (id_etudiant) => {
                 RETURNING *`,
                 [
                     null,
-                    'A_PLANIFIER',
+                    'GENEREE',
                     "Convocation automatique suite au seuil de 5 absences injustifiées.",
                     false,
-                    "Convocation créée automatiquement en attente de planification.",
+                    "Convocation générée automatiquement. Elle doit être vérifiée, modifiée si nécessaire, puis valider par le responsable avant envoi",
                     1,
                     nouveauDossier.rows[0].id_dossier
                 ]
             );
 
-            console.log('Convocation automatique créée :', convocation.rows[0]);
+            console.log('Convocation automatique générée :', convocation.rows[0]);
 
             await ajouterHistorique(
             nouveauDossier.rows[0].id_dossier,
             1,
             'CREATION_CONVOCATION',
-            'Convocation créée automatiquement suite au seuil SANCTION.'
+            'Convocation créée automatiquement suite au seuil de 5 absences injustifiées.'
         );
     }
     
