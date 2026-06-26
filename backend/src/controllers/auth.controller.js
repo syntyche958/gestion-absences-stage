@@ -46,8 +46,6 @@ const login = async (req, res) => {
             }
         );
 
-        console.log("NOUVEAU TOKEN:", token);
-
         res.status(200).json({
             message: 'Connexion réussie',
             token,

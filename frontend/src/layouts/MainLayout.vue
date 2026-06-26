@@ -1,4 +1,5 @@
 <script setup>
+import { computed } from 'vue'
 import Avatar from 'primevue/avatar'
 import Button from 'primevue/button'
 import { useRouter } from 'vue-router'
@@ -6,6 +7,42 @@ import { useAuthStore } from '../stores/auth.store'
 
 const router = useRouter()
 const authStore = useAuthStore()
+
+const user = computed(() => authStore.utilisateur)
+
+const userName = computed(() => {
+  if (!user.value) return 'Utilisateur connecté'
+
+  return (
+    user.value.nom_utilisateur ||
+    user.value.nom ||
+    user.value.email_utilisateur ||
+    user.value.email ||
+    'Utilisateur connecté'
+  )
+})
+
+const userRole = computed(() => {
+  if (!user.value) return 'Compte utilisateur'
+
+  if (user.value.nom_role) return user.value.nom_role
+  if (user.value.role === 1) return 'Administrateur'
+  if (user.value.role === 2) return 'Secrétariat'
+  if (user.value.role === 3) return 'Chef de département'
+
+  return 'Compte utilisateur'
+})
+
+const userInitials = computed(() => {
+  if (!userName.value) return 'U'
+
+  return userName.value
+    .split(' ')
+    .map(word => word[0])
+    .join('')
+    .slice(0, 2)
+    .toUpperCase()
+})
 
 const logout = () => {
   authStore.logout()
@@ -18,13 +55,11 @@ const logout = () => {
     <aside class="sidebar">
       <div>
         <div class="brand">
-          <div class="logo">
-            <i class="pi pi-graduation-cap"></i>
-          </div>
-          <div>
-            <h2>IUT Nord Franche-Comté</h2>
-            <p>Gestion administrative des suivis d'absences</p>
-          </div>
+          <img
+            src="../layouts/Logo_de_l'Université_Marie-et-Louis-Pasteur.png"
+            alt="Logo IUT"
+            class="brand-logo"
+          />
         </div>
 
         <nav class="menu">
@@ -50,23 +85,23 @@ const logout = () => {
 
           <router-link to="/historique">
             <i class="pi pi-bell"></i>
-            <span>Notifications</span>
-            <span class="badge">5</span>
-          </router-link>
-
-          <router-link to="/administration">
-            <i class="pi pi-cog"></i>
-            <span>Administration</span>
+            <span>Historique</span>
           </router-link>
         </nav>
       </div>
 
       <div class="user-box">
-        <Avatar label="MP" shape="circle" size="large" />
-        <div>
-          <strong>admin</strong>
-          <p>Administrateur</p>
+        <Avatar
+          :label="userInitials"
+          shape="circle"
+          size="large"
+        />
+
+        <div class="user-info">
+          <strong>{{ userName }}</strong>
+          <p>{{ userRole }}</p>
         </div>
+
         <Button
           icon="pi pi-sign-out"
           text
@@ -100,24 +135,34 @@ const logout = () => {
 }
 
 .brand {
-  height: 128px;
-  display: flex;
-  align-items: center;
-  gap: 16px;
-  padding: 0 28px;
-  border-bottom: 1px solid #e5e7eb;
-}
-
-.logo {
-  width: 52px;
-  height: 52px;
-  border-radius: 12px;
-  background: #2f7df6;
-  color: white;
+  height: 140px;
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 23px;
+  border-bottom: 1px solid #e5e7eb;
+  padding: 20px;
+}
+
+.brand-logo {
+  max-width: 200px;
+  max-height: 90px;
+  object-fit: contain;
+}
+
+.logo {
+  width: 70px;
+  height: 50px;
+  flex-shrink: 0;
+
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.logo img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
 }
 
 .brand h2 {
@@ -131,7 +176,7 @@ const logout = () => {
 }
 
 .menu {
-  padding: 28px 2px;
+  padding: 28px 20px;
   display: flex;
   flex-direction: column;
   gap: 10px;
@@ -147,7 +192,6 @@ const logout = () => {
   align-items: center;
   gap: 18px;
   font-size: 20px;
-  position: relative;
 }
 
 .menu a i {
@@ -159,21 +203,8 @@ const logout = () => {
 }
 
 .menu a.router-link-active {
-  background: #eaf2ff;
-  color: #0b63ff;
-}
-
-.badge {
-  margin-left: auto;
-  background: #ff2d3f;
-  color: white;
-  width: 30px;
-  height: 30px;
-  border-radius: 999px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 16px;
+  background: #fee2e2;
+  color: #e53935;
 }
 
 .user-box {
@@ -185,8 +216,14 @@ const logout = () => {
   gap: 14px;
 }
 
+.user-info {
+  flex: 1;
+  min-width: 0;
+}
+
 .user-box strong {
-  font-size: 18px;
+  font-size: 16px;
+  display: block;
 }
 
 .user-box p {

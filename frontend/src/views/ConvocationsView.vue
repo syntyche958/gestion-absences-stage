@@ -1,5 +1,5 @@
 <script setup>
-import { ref, onMounted } from 'vue'
+import { ref, onMounted, computed } from 'vue'
 
 import DataTable from 'primevue/datatable'
 import Column from 'primevue/column'
@@ -11,6 +11,7 @@ import Select from 'primevue/select'
 import Textarea from 'primevue/textarea'
 import Checkbox from 'primevue/checkbox'
 import DatePicker from 'primevue/datepicker'
+import {useToast} from 'primevue/usetoast'
 
 import api from '../services/api'
 
@@ -20,16 +21,33 @@ const showEditDialog = ref(false)
 const selectedConvocation = ref(null)
 const convocationForm = ref({})
 const showCreateDialog = ref(false)
+const toast = useToast()
+const search = ref('')
+
+const filteredConvocations = computed(() => {
+  return convocations.value.filter((convocation)=>{
+    const texte = `
+      ${convocation.nom_etudiant || ''}
+      ${convocation.prenom_etudiant || ''}
+      ${convocation.motif || ''}
+      ${convocation.statut_convoc || ''}
+    `
+      .toLowerCase()
+
+      return texte.includes(search.value.toLowerCase())
+  })
+})
 
 const nouvelleConvocation = ref({
     date_heure: null,
     heure: '',
-    statut_convoc: 'Generée',
+    statut_convoc: 'GENEREE',
     motif: '',
     signature: false,
     commentaire_convoc: '',
     id_utilisateur: 1,
-    id_dossier: null
+    id_dossier: null,
+    id_action: null
 })
 
 const dossiers = ref([])
@@ -41,11 +59,15 @@ const loadDossiers = async () => {
         }
     })
 
-    dossiers.value = response.data
+    dossiers.value = response.data.filter(
+      dossier =>
+        dossier.statut_dossier === 'EN_COURS' &&
+        dossier.niveau_alerte === 'SANCTION'
+    )
 }
 
 const statutsConvocation = [
-  'CREER',
+  'GENEREE',
   'A_VALIDER',
   'VALIDEE',
   'ENVOYEE',
@@ -140,52 +162,136 @@ const modifierConvocation = async () => {
     }
   )
 
+  toast.add({
+    severity: 'success',
+    summary: 'succès',
+    detail: 'Convocation modifiée avec succès',
+    life: 3000
+  })
+
   showEditDialog.value = false
   await loadConvocations()
 }
 
 const ouvrirCreation = () => {
     nouvelleConvocation.value = {
-        date_heure: null,
-        heure: '',
-        statut_convoc: 'GENEREE',
-        motif: '',
-        signature: false,
-        commentaire_convoc: '',
-        id_utilisateur: 1,
-        id_dossier: null
+      date_heure: null,
+      heure: '',
+      statut_convoc: 'GENEREE',
+      motif: '',
+      signature: false,
+      commentaire_convoc: '',
+      id_utilisateur: 1,
+      id_dossier: null,
+      id_action: null
     }
     
     showCreateDialog.value = true
 }
 
-const creerConvocation = async () => {  
+const creerConvocation = async () => { 
+  try {
     await api.post('/convocations', {
-        date_heure: formatDateForBackend(
-            nouvelleConvocation.value.date_heure,
-            nouvelleConvocation.value.heure
-        ),
-        statut_convoc: nouvelleConvocation.value.statut_convoc,
-        motif: nouvelleConvocation.value.motif,
-        signature: nouvelleConvocation.value.signature,
-        commentaire_convoc: nouvelleConvocation.value.commentaire_convoc,
-        id_utilisateur: nouvelleConvocation.value.id_utilisateur,
-        id_dossier: nouvelleConvocation.value.id_dossier
+      date_heure: formatDateForBackend(
+        nouvelleConvocation.value.date_heure,
+        nouvelleConvocation.value.heure
+      ),
+      statut_convoc: nouvelleConvocation.value.statut_convoc,
+      motif: nouvelleConvocation.value.motif,
+      signature: nouvelleConvocation.value.signature,
+      commentaire_convoc: nouvelleConvocation.value.commentaire_convoc,
+      id_utilisateur: nouvelleConvocation.value.id_utilisateur,
+      id_dossier: nouvelleConvocation.value.id_dossier
     },
     {
-        headers: {
-            Authorization: `Bearer ${localStorage.getItem('token')}`
-        }
-    }
-  )
+      headers: {
+        Authorization: `Bearer ${localStorage.getItem('token')}`
+      }
+    })
 
-  showCreateDialog.value = false
+    if (nouvelleConvocation.value.id_action) {
+      await api.put(
+        `/actions/${nouvelleConvocation.value.id_action}`, 
+        {
+          statut_action: 'TERMINEE',
+          accuse_reception: false,
+          remise_main_propre: false,
+          signature_action: false,
+          commentaire_action: 'ACtion terminée après création de ma convocation.'
+        },
+        {
+          headers: {
+            Authorization: `Bearer ${localStorage.getItem('token')}`
+          }
+        }
+      )
+    }
+
+    toast.add({
+      severity: 'success',
+      summary: 'succès',
+      detail: 'Convocation créée avec succès',
+      life: 3000
+    })
+
+    showCreateDialog.value = false
+    await loadConvocations()
+  } catch (error) {
+    toast.add({
+      severity: 'warn',
+      summary: 'Attention',
+      detail: error.response?.data?.message || 'Impossible de créer la convocation',
+      life: 3000
+    })
+  }
+}
+
+const supprimerCOnvocation = async (convocation) =>{
+  if (!confirm('Voulez-vous vraiment supprimer cette convocation ?')) {
+    return
+  }
+
+  await api.delete(`/convocations/${convocation.id_convocation}`, {
+    headers: {
+      Authorization: `Bearer ${localStorage.getItem('token')}`
+    }
+  })
+
+  toast.add({
+    severity: 'success',
+    summary: 'Succès',
+    detail: 'Convocation supprimée avec succès',
+    life: 3000
+  })
+
   await loadConvocations()
 }
 
-onMounted(() => {
-    loadConvocations()
-    loadDossiers()
+onMounted(async () => {
+  await loadConvocations()
+  await loadDossiers()
+
+  const prefill = localStorage.getItem('convocation_prefill')
+
+  if (prefill) {
+    const data = JSON.parse(prefill)
+
+    nouvelleConvocation.value= {
+      date_heure: null,
+      heure: '',
+      statut_convoc: 'GENEREE',
+      motif: data.motif,
+      signature: false,
+      commentaire_convoc: '',
+      id_utilisateur: 1,
+      id_dossier: data.id_dossier,
+      id_action: data.id_action
+    }
+
+    showCreateDialog.value=true
+    localStorage.removeItem('convocation_prefill')
+  }
+
 })
 </script>
 
@@ -195,17 +301,23 @@ onMounted(() => {
       <h1>Convocations</h1>
       <p>Gestion des convocations générées après les seuils d'absences</p>
     </div>
+  </div>
 
-    <Button
+  <div class="filters">
+    <InputText
+      v-model ="search"
+      placeholder="Rechercher une convocation..."
+    />
+    <!-- <Button
       label="Nouvelle convocation"
       icon="pi pi-plus"
       @click="ouvrirCreation"
-    />
+    /> -->
   </div>
 
   <div class="table-card">
     <DataTable
-      :value="convocations"
+      :value="filteredConvocations"
       paginator
       :rows="10"
       stripedRows
@@ -247,19 +359,28 @@ onMounted(() => {
 
       <Column header="Actions">
         <template #body="slotProps">
-          <Button
-            icon="pi pi-eye"
-            rounded
-            text
-            @click="voirConvocation(slotProps.data)"
-          />
-          <Button
-            icon="pi pi-pencil"
-            rounded
-            text
-            severity="warning"
-            @click="ouvrirModification(slotProps.data)"
-          />
+          <div class="action-buttons">
+            <Button
+              icon="pi pi-eye"
+              rounded
+              text
+              @click="voirConvocation(slotProps.data)"
+            />
+            <Button
+              icon="pi pi-pencil"
+              rounded
+              text
+              severity="warning"
+              @click="ouvrirModification(slotProps.data)"
+            />
+            <Button
+              icon="pi pi-trash"
+              rounded
+              text
+              severity="danger"
+              @click="supprimerCOnvocation(slotProps.data)"
+            />
+          </div>
         </template>
       </Column>
     </DataTable>
@@ -439,7 +560,7 @@ onMounted(() => {
                 optionValue="id_dossier"
                 placeholder="Choisir un dossier"
             >
-                <template #option=""slotProps>
+                <template #option="slotProps">
                     {{ slotProps.option.nom_etudiant }}
                     {{ slotProps.option.prenom_etudiant }}
                     -
@@ -646,4 +767,20 @@ onMounted(() => {
     gap: 10px;
     margin-top: 10px;
 }
+
+.filters {
+  display: flex;
+  margin-bottom: 24px;
+}
+
+.filters :deep(.p-inputtext) {
+  width: 420px;
+}
+
+.action-buttons {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
 </style>

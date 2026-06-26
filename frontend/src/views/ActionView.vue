@@ -6,10 +6,14 @@ import Column from 'primevue/column'
 import Tag from 'primevue/tag'
 import Button from 'primevue/button'
 import Dialog from 'primevue/dialog'
+import { useToast } from 'primevue/usetoast'
+import { useRouter } from 'vue-router'
 
 import api from '../services/api'
 
 const actions = ref([])
+const toast = useToast()
+const router = useRouter()
 
 const showDialog = ref(false)
 const selectedAction = ref(null)
@@ -49,6 +53,49 @@ const voirAction = (action) => {
     showDialog.value = true
 }
 
+const traiterAction = async (action) => {
+  if (action.niveau_alerte === 'SANCTION') {
+    localStorage.setItem(
+      'convocation_prefill',
+      JSON.stringify({
+        id_dossier: action.id_dossier,
+        id_action: action.id_action,
+        nom_etudiant: action.nom_etudiant,
+        prenom_etudiant: action.prenom_etudiant,
+        motif: `Convocation suite au seuil de sanction pour ${action.nom_etudiant} ${action.prenom_etudiant}.`
+      })
+    )
+
+    router.push('/convocations')
+    return
+  }
+
+  await api.put(
+    `/actions/${action.id_action}`,
+    {
+      statut_action: 'TERMINEE',
+      accuse_reception: action.accuse_reception,
+      remise_main_propre: action.remise_main_propre,
+      signature_action: action.signature_action,
+      commentaire_action: action.commentaire_action
+    },
+    {
+      headers: {
+        Authorization: `Bearer ${localStorage.getItem('token')}`
+      }
+    }
+  )
+
+  toast.add({
+    severity: 'success',
+    summary: 'Succès',
+    detail: 'Action traitée avec succès',
+    life: 3000
+  })
+
+  await loadActions()
+}
+
 onMounted(loadActions)
 </script>
 
@@ -58,11 +105,6 @@ onMounted(loadActions)
       <h1>Suivi administratif</h1>
       <p>Suivi des actions générées après les seuils d'absences</p>
     </div>
-
-    <Button
-      label="Nouvelle action"
-      icon="pi pi-plus"
-    />
   </div>
 
   <div class="table-card">
@@ -116,6 +158,15 @@ onMounted(loadActions)
             rounded
             text
             @click="voirAction(slotProps.data)"
+          />
+
+          <Button
+            v-if="slotProps.data.statut_action === 'A_TRAITER'"
+            icon="pi pi-check"
+            severity="success"
+            rounded
+            text
+            @click="traiterAction(slotProps.data)"
           />
         </template>
       </Column>

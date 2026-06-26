@@ -46,6 +46,17 @@ const verifierSeuils = async (id_etudiant) => {
             return;
         }
 
+        //cloturer les anciens dossiers EN_COURS de cet étudiant
+        await pool.query(
+            `UPDATE "DossierAdministratif"
+            SET status_dossier = 'CLOTURE',
+                date_cloture= NOW()
+            WHERE id_etudiant = $1
+            AND statut_dossier = 'EN_COURS',
+            `
+            [id_etudiant]
+        )
+
         //creer le dossier administratif
         const nouveauDossier = await pool.query(
             `INSERT INTO "DossierAdministratif"

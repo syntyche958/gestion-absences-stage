@@ -97,18 +97,41 @@ const getSuiviAbsences = async (req, res) => {
                 e.groupe_td,
                 e.groupe_tp,
                 e.semestre,
-                COUNT(a.id_absence) AS total_absences
+
+                COUNT(a.id_absence) AS total_absences,
+
+                SUM(
+                    CASE
+                        WHEN a.justifiee = false THEN 1
+                        ELSE 0
+                    END
+                ) AS total_injustifiees,
+
+                d.id_dossier,
+                d.niveau_alerte,
+                d.statut_dossier
+
             FROM "Etudiant" e
+
             LEFT JOIN "Absence" a
             ON e.id_etudiant = a.id_etudiant
+
+            LEFT JOIN "DossierAdministratif" d
+            ON e.id_etudiant = d.id_etudiant
+            AND d.statut_dossier = 'EN_COURS'
+
             GROUP BY
                 e.id_etudiant,
                 e.nom_etudiant,
                 e.prenom_etudiant,
                 e.groupe_td,
                 e.groupe_tp,
-                e.semestre
-            ORDER BY total_absences DESC`
+                e.semestre,
+                d.id_dossier,
+                d.niveau_alerte,
+                d.statut_dossier
+
+            ORDER BY total_injustifiees DESC`
         );
 
         res.status(200).json(result.rows);

@@ -1,5 +1,6 @@
 const pool = require('../config/db');
-const ajoutHostorique = require('../services/historique.service');
+const ajoutHistorique = require('../services/historique.service');
+
 //creer une convocation
 const createConvocation = async (req, res) =>{
     try {
@@ -12,6 +13,26 @@ const createConvocation = async (req, res) =>{
             id_utilisateur,
             id_dossier
         } = req.body;
+
+        const convocationExiste = await pool.query(
+            `SELECT *
+            FROM "Convocation" c
+            JOIN "DossierAdministratif" d
+            ON c.id_dossier = d.id_dossier
+            WHERE d.id_etudiant = (
+                SELECT id_etudiant
+                FROM "DossierAdministratif"
+                WHERE id_dossier = $1
+            )
+            AND c.statut_convoc != 'ANNULEE'`,
+            [id_dossier]
+        )
+
+        if (convocationExiste.rows.length > 0) {
+            return res.status(409).json({
+                message: 'Une convocation existe déjà pour ce dossier.'
+            })
+        }
 
         const result = await pool.query(
             `INSERT INTO "Convocation"
@@ -52,7 +73,6 @@ const createConvocation = async (req, res) =>{
 };
 
 //Récupérer toutes les convocation
-
 const getAllConvocation = async (req, res) =>{
     try {
         const result = await pool.query(
@@ -162,12 +182,32 @@ const updateConvocation = async (req, res) =>{
 
     const convocationModiffee = result.rows[0]
 
-    await ajoutHostorique(
+    if(
+        convocationModiffee.signature === true ||
+        convocationModiffee.statut_convoc === 'SIGNEE'
+    ) {
+        await pool.query(
+            `UPDATE "DossierAdministratif"
+            SET statut_dossier = 'CLOTURE',
+                date_cloture = NOW()
+            WHERE id_dossier = $1`,
+            [convocationModiffee.id_dossier]
+        )
+
+        await ajoutHistorique(
+            convocationModiffee.id_dossier,
+            convocationModiffee.id_utilisateur,
+            'CLOTURE_DOSSIER',
+            'Dossier clôturé automatiquement après signature de la convocation.'
+        )
+    }
+
+    await ajoutHistorique(
         convocationModiffee.id_dossier,
         convocationModiffee.id_utilisateur,
         'Modification_convocation',
-        `Convocation mise à jour avec le statut ${convocationModiffee.statut_convoc}.`
-    );
+        `Convocation mise à jour avec le statut ${convocationModiffee.statut_convoc}`
+    )
 
     res.status(200).json({
         message: 'Convocation mise à jour',
@@ -212,11 +252,33 @@ const deleteConvocation = async (req, res) => {
     }
 };
 
+const getConvocationsByDossier = async (req, res) => {
+    try {
+        const { id } = req.params
+
+        const result = await pool.query(
+            `SELECT *
+             FROM "Convocation"
+             WHERE id_dossier = $1
+             ORDER BY date_heure DESC`,
+            [id]
+        )
+
+        res.status(200).json(result.rows)
+
+    } catch (error) {
+        console.error(error)
+        res.status(500).json({
+            message: 'Erreur serveur'
+        })
+    }
+}
 
 module.exports = {
     createConvocation,
     getAllConvocation,
     getConvocationById,
     updateConvocation,
-    deleteConvocation
+    deleteConvocation,
+    getConvocationsByDossier
 };

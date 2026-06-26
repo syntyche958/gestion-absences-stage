@@ -9,17 +9,22 @@ const {
     getAllConvocation,
     getConvocationById,
     updateConvocation,
-    deleteConvocation
+    deleteConvocation,
+    getConvocationsByDossier
 } = require('../controllers/convocation.controller');
 
 router.post('/', verifyToken, createConvocation);
 
 router.get ('/', verifyToken, getAllConvocation);
 
+router.get('/dossier/:id', verifyToken, getConvocationsByDossier);
+
 router.get('/:id', verifyToken, getConvocationById);
 
 router.put('/:id', verifyToken, updateConvocation);
 
 router.delete('/:id', verifyToken, deleteConvocation);
+
+
 
 module.exports = router;

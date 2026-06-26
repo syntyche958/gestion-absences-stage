@@ -5,19 +5,16 @@ const getAllActions = async (req, res) => {
     try {
         const result = await pool.query(
             `SELECT
-            a.*,
-            d.niveau_alerte,
-            e.nom_etudiant,
-            e.prenom_etudiant
-            
+                a.*,
+                d.niveau_alerte,
+                e.nom_etudiant,
+                e.prenom_etudiant 
             FROM "ActionAdministrative" a
-
             JOIN "DossierAdministratif" d
-            ON a.id_dossier = d.id_dossier
-            
+            ON a.id_dossier = d.id_dossier 
             JOIN "Etudiant" e
             ON d.id_etudiant = e.id_etudiant
-            
+            WHERE d.statut_dossier = 'EN_COURS' 
             ORDER BY a."dateEnvoi" DESC`
         );
 
@@ -40,19 +37,15 @@ const getActionById = async (req, res) => {
 
         const result = await pool.query(
             `SELECT
-            a.*,
-            d.niveau_alerte,
-            e.nom_etudiant,
-            e.prenom_etudiant
-            
+                a.*,
+                d.niveau_alerte,
+                e.nom_etudiant,
+                e.prenom_etudiant
             FROM "ActionAdministrative" a
-
             JOIN "DossierAdministratif" d
             ON a.id_dossier = d.id_dossier
-            
             JOIN "Etudiant" e
-            ON d.id_etudiant = e.id_etudiant
-            
+            ON d.id_etudiant = e.id_etudiant  
             WHERE a.id_action = $1`,
             [id]
         );

@@ -1,5 +1,6 @@
 <script setup>
 import { ref, onMounted, computed } from 'vue'
+import { useRouter } from 'vue-router'
 
 import DataTable from 'primevue/datatable'
 import Column from 'primevue/column'
@@ -8,8 +9,16 @@ import Select from 'primevue/select'
 import Button from 'primevue/button'
 import Tag from 'primevue/tag'
 import Dialog  from 'primevue/dialog'
+import DatePicker from 'primevue/datepicker'
+import Checkbox from 'primevue/checkbox'
+import Textarea from 'primevue/textarea'
+import InputNumber from 'primevue/inputnumber'
+import { useToast } from 'primevue/usetoast'
 
 import api from '../services/api'
+
+const router = useRouter()
+const toast = useToast()
 
 const dossiers = ref([])
 const search = ref('')
@@ -19,10 +28,13 @@ const groupe = ref(null)
 const showDialog = ref(false)
 const selectedStudent = ref(null)
 const absencesEtudiant = ref([])
+const showAbsenceDialog = ref(false)
+const actionsEtudiant = ref([])
+const convocationsEtudiant = ref([])
+const historiqueEtudiant = ref([])
 
 const semestres = ['S1', 'S2', 'S3', 'S4', 'S5', 'S6']
 const groupes = ['BUT1-A', 'BUT1-C', 'BUT2-A', 'BUT2-B', 'BUT3-A']
-
 
 const loadDossiers = async () => {
   const response = await api.get('/absences/suivi', {
@@ -54,6 +66,49 @@ const filteredDossiers = computed(() => {
   })
 })
 
+const convoquerEtudiant = async (etudiant) =>{
+  try {
+    const response = await api.get('/dossiers', {
+      headers: {
+        Authorization:`Bearer ${localStorage.getItem('token')}`
+      }
+    })
+
+    const dossiersEtudiant = response.data.filter(
+      dossier => 
+        dossier.id_etudiant === etudiant.id_etudiant &&
+        dossier.statut_dossier === 'EN_COURS' &&
+        dossier.niveau_alerte === 'SANCTION'
+    )
+
+    if (dossiersEtudiant.length === 0) {
+      toast.add({
+        severity: 'warn',
+        summary: 'Impossible',
+        detail: "Cet étudiant n'a pas de dossier SANCTION actif",
+      })
+      return
+    }
+
+    const dossierPrioritaire = dossiersEtudiant[dossiersEtudiant.length - 1]
+
+    localStorage.setItem(
+      'convocation_prefill',
+      JSON.stringify({
+        id_dossier: dossierPrioritaire.id_dossier,
+        nom_etudiant: etudiant.nom_etudiant,
+        prenom_etudiant: etudiant.prenom_etudiant,
+        motif: `Convocation suite au suivi des absences ${etudiant.nom_etudiant} ${etudiant.prenom_etudiant}.`
+      })
+    )
+
+    router.push('/convocations')
+  } catch (error) {
+    console.error(error)
+    alert("Erreur lors de la préparation de la convocation.")
+  }
+}
+
 const formatDate = (date) => {
   return new Date(date).toLocaleDateString('fr-FR')
 }
@@ -77,16 +132,114 @@ const getInitiales = (dossier) => {
 }
 
 const voirEtudiant = async (etudiant) => {
-    selectedStudent.value = etudiant
-    showDialog.value = true
+  selectedStudent.value = etudiant
+  showDialog.value = true
 
-    const response = await api.get(`/absences/etudiant/${etudiant.id_etudiant}`, {
-        headers: {
-            Authorization: `Bearer ${localStorage.getItem('token')}`
-        }
+  const headers = {
+    Authorization: `Bearer ${localStorage.getItem('token')}`
+  }
+
+  const absencesResponse = await api.get(
+    `/absences/etudiant/${etudiant.id_etudiant}`,
+    { headers }
+  )
+
+  absencesEtudiant.value = absencesResponse.data
+
+  if (etudiant.id_dossier) {
+    const actionsResponse = await api.get(
+      `/actions/dossier/${etudiant.id_dossier}`,
+      { headers }
+    )
+
+    const convocationsResponse = await api.get(
+      `/convocations/dossier/${etudiant.id_dossier}`,
+      { headers }
+    )
+
+    const historiqueResponse = await api.get(
+      `/historique/dossier/${etudiant.id_dossier}`,
+      { headers }
+    )
+
+    actionsEtudiant.value = actionsResponse.data
+    convocationsEtudiant.value = convocationsResponse.data
+    historiqueEtudiant.value = historiqueResponse.data
+  } else {
+    actionsEtudiant.value = []
+    convocationsEtudiant.value = []
+    historiqueEtudiant.value = []
+  }
+}
+
+const absenceForm = ref({
+  date_absence: null,
+  duree: 2,
+  justifiee: false,
+  motif:'',
+  statut: 'enregistrée',
+  id_etudiant: null
+})
+
+const ouvrirAjoutAbsence = () => {
+  absenceForm.value = {
+    date_absence: null,
+    duree: 2,
+    justifiee: false,
+    motif: '',
+    statut:'enregistrée',
+    id_etudiant: null
+  }
+
+  showAbsenceDialog.value = true
+}
+
+const formatDateForBackend = (date) => {
+
+  if (!date) return null
+
+  const d = new Date(date)
+
+  const year = d.getFullYear()
+  const month = String(d.getMonth() + 1).padStart(2, '0')
+  const day = String(d.getDate()).padStart(2, '0')
+
+  return `${year}-${month}-${day}`
+}
+
+const ajouterAbsence = async () => {
+  if(!absenceForm.value.id_etudiant || !absenceForm.value.date_absence) {
+    toast.add({
+      severity:'warn',
+      summary:'Attention',
+      detail: 'Veuillez choisir un étudiant et une date.',
+      life:3000
     })
+    return
+  }
 
-    absencesEtudiant.value =response.data
+  await api.post('/absences', {
+    date_absence: formatDateForBackend(absenceForm.value.date_absence),
+    duree: absenceForm.value.duree,
+    justifiee: absenceForm.value.justifiee,
+    motif: absenceForm.value.motif,
+    statut: absenceForm.value.statut,
+    id_etudiant: absenceForm.value.id_etudiant
+  },{
+    headers: {
+      Authorization: `Bearer ${localStorage.getItem('token')}`
+    }
+  })
+
+  toast.add({
+    severity: 'success',
+    summary: 'succès',
+    detail: 'Absence ajoutée avec succès.',
+    life:3000
+  })
+
+  showAbsenceDialog.value = false
+  await loadDossiers()
 }
 
 onMounted(loadDossiers)
@@ -102,6 +255,7 @@ onMounted(loadDossiers)
     <Button
       label="Ajouter une absence"
       icon="pi pi-plus"
+      @click="ouvrirAjoutAbsence"
     />
   </div>
 
@@ -144,7 +298,9 @@ onMounted(loadDossiers)
       <Column header="Étudiant">
         <template #body="slotProps">
           <div class="student-cell">
-            <div class="avatar">
+            <div class="avatar clickable"
+              @click="convoquerEtudiant(slotProps.data)"
+            >
               {{ getInitiales(slotProps.data) }}
             </div>
 
@@ -166,10 +322,10 @@ onMounted(loadDossiers)
       <Column header="Statut">
         <template #body="slotProps">
             <Tag
-                :value="getStatut(Number(slotProps.data.total_absences))"
+                :value="getStatut(Number(slotProps.data.total_injustifiees))"
                 :severity="
                     getSeverity(
-                        getStatut(Number(slotProps.data.total_absences))
+                        getStatut(Number(slotProps.data.total_injustifiees))
                     )
                 "
             />
@@ -190,12 +346,92 @@ onMounted(loadDossiers)
         </Column>
     </DataTable>
   </div>
-   <Dialog
-        v-model:visible="showDialog"
-        modal
-        header="Fiche étudiant"
-        :sytle="{width: '900px'}"
-    >
+  <Dialog
+    v-model:visible="showAbsenceDialog"
+    modal
+    header="Ajouter une absence"
+    :style="{ width: '650px' }"
+  >
+    <div class="form-grid">
+      <div class="full">
+        <label>Etudiant</label>
+        <Select
+          v-model="absenceForm.id_etudiant"
+          :options="dossiers"
+          optionLabel="nom_etudiant"
+          optionValue="id_etudiant"
+          placeholder="Choisir un étudiant"
+        >
+          <template #option="slotProps">
+            {{ slotProps.option.nom_etudiant }}
+            {{ slotProps.option.prenom_etudiant }}
+            -
+            {{ slotProps.option.groupe_td }}
+          </template>
+        </Select>
+      </div>
+
+      <div>
+        <label>Date d'absence</label>
+        <DatePicker
+          v-model="absenceForm.date_absence"
+          dateFormat="dd/mm/yy"
+          showIcon
+          placeholder="Choisir une date"
+        />
+      </div>
+
+      <div>
+        <label>Durée</label>
+        <InputNumber
+          v-model="absenceForm.duree"
+          :min="1"
+          :max="8"
+          suffix="h"
+        />
+      </div>
+
+      <div>
+        <label>Motif</label>
+        <Textarea
+          v-model="absenceForm.motif"
+          rows="3"
+          autoResize
+          placeholder="Ex: absence injustifiée, maladie, rendez-vous..."
+        />
+      </div>
+
+      <div class="checkbox-line full">
+        <Checkbox
+          v-model="absenceForm.justifiee"
+          binary
+        />
+        <span>Absence justifiée</span>
+      </div>
+    </div>
+
+    <template #footer>
+      <Button
+        label="Annuler"
+        severity="secondary"
+        outlined
+        @click="showAbsenceDialog = false" 
+      />
+
+      <Button
+        label="Ajouter"
+        icon="pi pi-check"
+        @click="ajouterAbsence"
+      />
+    </template>
+  </Dialog>
+
+    <Dialog
+          v-model:visible="showDialog"
+          modal
+          header="Fiche étudiant"
+          :style="{ width: '900px' }"
+      >
         <div v-if="selectedStudent" class="student-detail">
             <div class="detail-avatar">
                 {{ getInitiales(selectedStudent) }}
@@ -206,8 +442,8 @@ onMounted(loadDossiers)
             </h2>
 
             <Tag
-                :value="getStatut(Number(selectedStudent.total_absences))"
-                :severity="getSeverity(getStatut(Number(selectedStudent.total_absences)))"
+                :value="getStatut(Number(selectedStudent.total_injustifiees))"
+                :severity="getSeverity(getStatut(Number(selectedStudent.total_injustifiees)))"
             />
 
            <div class="detail-grid">
@@ -256,6 +492,53 @@ onMounted(loadDossiers)
             </Column>
 
             <Column field="motif" header="Motif"/>
+        </DataTable>
+        <h3>Actions administratives</h3>
+        <DataTable
+          :value="actionsEtudiant"
+          :rows="5"
+          paginator
+          stripedRows
+        >
+          <Column field="type_action" header="Type" />
+          <Column field="moyenEnvoi" header="Moyen" />
+          <Column field="statut_action" header="Statut" />
+          <Column field="commentaire_action" header="Commentaire" />
+        </DataTable>
+
+        <h3>Convocations</h3>
+        <DataTable
+          :value="convocationsEtudiant"
+          :rows="5"
+          paginator
+          stripedRows
+        >
+          <Column header="Date">
+            <template #body="slotProps">
+              {{ formatDate(slotProps.data.date_heure) }}
+            </template>
+          </Column>
+
+          <Column field="statut_convoc" header="Statut" />
+          <Column field="motif" header="Motif" />
+          <Column field="commentaire_convoc" header="Commentaire" />
+        </DataTable>
+
+        <h3>Historique administratif</h3>
+        <DataTable
+          :value="historiqueEtudiant"
+          :rows="5"
+          paginator
+          stripedRows
+        >
+          <Column field="action_effectuee" header="Action" />
+          <Column field="description" header="Description" />
+
+          <Column header="Date">
+            <template #body="slotProps">
+              {{ formatDate(slotProps.data.date_action) }}
+            </template>
+          </Column>
         </DataTable>
     </Dialog>
 </template>
@@ -391,4 +674,45 @@ onMounted(loadDossiers)
     font-size: 18px;
     font-weight: 600;
 }
+
+.clickable {
+  cursor: pointer;
+  transition: transform 0.15s ease, box-shadow 0.15s ease;
+}
+
+.clickable:hover {
+  transform: scale(1.06);
+  box-shadow: 0 4px 12px rgba(15, 23, 42, 0.18);
+}
+.form-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 20px;
+}
+
+.form-grid label {
+  display: block;
+  margin-bottom: 8px;
+  font-weight: 600;
+  color: #334155;
+}
+
+.form-grid :deep(.p-inputtext),
+.form-grid :deep(.p-select),
+.form-grid :deep(.p-datepicker),
+.form-grid :deep(.p-inputnumber),
+.form-grid :deep(.p-textarea) {
+  width: 100%;
+}
+
+.full {
+  grid-column: 1 / -1;
+}
+
+.checkbox-line {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
 </style>
