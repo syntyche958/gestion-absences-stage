@@ -65,14 +65,17 @@ const verifierSeuils = async (id_etudiant) => {
                 niveau_alerte,
                 date_creation,
                 commentaire_dossier,
-                id_etudiant
+                id_etudiant,
+                annee_universitaire
             )
-            VALUES ($1, $2, NOW(), $3, $4)
+            VALUES ($1, $2, NOW(), $3, $4, $5)
             RETURNING *`,
             [
                 'EN_COURS',
                 niveauAlerte,
-                `Dossier créé automatiquement après ${total} absences injustifiées.`, id_etudiant
+                `Dossier créé automatiquement après ${total} absences injustifiées.`, 
+                id_etudiant,
+                '2025-2026'
             ]
         );
 

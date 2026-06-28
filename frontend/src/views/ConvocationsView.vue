@@ -122,7 +122,10 @@ const ouvrirModification = (convocation) => {
     date_heure: convocation.date_heure
       ? new Date(convocation.date_heure)
       : null,
-    heure: extraireHeure(convocation.date_heure)
+    heure: extraireHeure(convocation.date_heure),
+    lieu: convocation.lieu || 'Bureau du chef de département',
+    disponibilites: convocation.disponibilites || '',
+    commentaire_interne: convocation.commentaire_interne || ''
   }
 
   showEditDialog.value = true
@@ -267,6 +270,26 @@ const supprimerCOnvocation = async (convocation) =>{
   await loadConvocations()
 }
 
+const formatDateCourrier = (date) => {
+  if (!date) return 'Date à planifier'
+
+  return new Date(date).toLocaleDateString('fr-FR', {
+    weekday: 'long',
+    day: 'numeric',
+    month: 'long',
+    year: 'numeric'
+  })
+}
+
+const formatHeureCourrier = (date) => {
+  if (!date) return 'Heure à définir'
+
+  return new Date(date).toLocaleTimeString('fr-FR', {
+    hour: '2-digit',
+    minute: '2-digit'
+  })
+}
+
 onMounted(async () => {
   await loadConvocations()
   await loadDossiers()
@@ -387,169 +410,197 @@ onMounted(async () => {
   </div>
 
   <Dialog
-        v-model:visible="showDialog"
-        modal
-        header="Détail de la convocation"
-        :style="{ width: '750px' }"
-    >
-    <div
-      v-if="selectedConvocation"
-      class="detail-grid"
-    >
-      <div>
-            <strong>Étudiant</strong>
-            <p>
-                {{ selectedConvocation.nom_etudiant }}
-                {{ selectedConvocation.prenom_etudiant }}
-            </p>
-      </div>
-
-      <div>
-            <strong>Statut</strong>
-            <p>{{ selectedConvocation.statut_convoc }}</p>
-      </div>
-
-      <div>
-            <strong>Date</strong>
-            <p>{{ formatDate(selectedConvocation.date_heure) }}</p>
-      </div>
-
-      <div>
-            <strong>Niveau d'alerte</strong>
-            <p>{{ selectedConvocation.niveau_alerte }}</p>
-      </div>
-
-      <div>
-            <strong>Signature</strong>
-            <p>{{ selectedConvocation.signature ? 'Oui' : 'Non' }}</p>
-      </div>
-
-      <div>
-            <strong>Utilisateur responsable</strong>
-            <p>
-                {{ selectedConvocation.nom_utilisateur }}
-                {{ selectedConvocation.prenom_utilisateur }}
-            </p>
-      </div>
-    </div>
-
-    <div
-      v-if="selectedConvocation"
-      class="commentaire-box"
-    >
-      <strong>Motif</strong>
-      <p>{{ selectedConvocation.motif }}</p>
-
-      <strong>Commentaire</strong>
-      <p>
-        {{
-          selectedConvocation.commentaire_convoc ||
-          'Aucun commentaire'
-        }}
-      </p>
-    </div>
-  </Dialog>
-
-  <Dialog
     v-model:visible="showEditDialog"
     modal
-    header="Modifier la convocation"
-    :style="{ width: '750px' }"
->
+    header="Préparer la convocation"
+    :style="{ width: '800px' }"
+  >
     <div class="form-grid">
+      <div>
+        <label>Date de convocation</label>
+        <DatePicker
+          v-model="convocationForm.date_heure"
+          dateFormat="dd/mm/yy"
+          showIcon
+          placeholder="Choisir une date"
+        />
+      </div>
 
-        <div>
-            <label>Date de convocation</label>
+      <div>
+        <label>Heure</label>
+        <InputText
+          v-model="convocationForm.heure"
+          placeholder="10:30"
+        />
+      </div>
 
-            <DatePicker
-                v-model="convocationForm.date_heure"
-                dateFormat="dd/mm/yy"
-                showIcon
-                placeholder="Choisir une date"
-            />
+      <div class="full">
+        <label>Lieu</label>
+        <InputText
+          v-model="convocationForm.lieu"
+          placeholder="Bureau du chef de département"
+        />
+      </div>
+
+      <div class="full">
+        <label>Disponibilités / créneaux proposés</label>
+        <Textarea
+          v-model="convocationForm.disponibilites"
+          rows="3"
+          autoResize
+          placeholder="Ex : Lundi 10h-12h, mardi 14h-16h..."
+        />
+      </div>
+
+      <div>
+        <label>Statut</label>
+        <Select
+          v-model="convocationForm.statut_convoc"
+          :options="statutsConvocation"
+          placeholder="Choisir un statut"
+        />
+      </div>
+
+      <div>
+        <label>Signature</label>
+        <div class="checkbox-line">
+          <Checkbox
+            v-model="convocationForm.signature"
+            binary
+          />
+          <span>Convocation signée</span>
         </div>
+      </div>
 
-        <div>
-            <label>Heure</label>
+      <div class="full">
+        <label>Motif visible dans le courrier</label>
+        <Textarea
+          v-model="convocationForm.motif"
+          rows="3"
+          autoResize
+        />
+      </div>
 
-            <InputText
-                v-model="convocationForm.heure"
-                placeholder="10:30"
-            />
-        </div>
+      <div class="full">
+        <label>Commentaire visible dans le courrier</label>
+        <Textarea
+          v-model="convocationForm.commentaire_convoc"
+          rows="3"
+          autoResize
+          placeholder="Ex : Merci de vous présenter avec vos justificatifs."
+        />
+      </div>
 
-        <div>
-            <label>Statut</label>
-
-            <Select
-                v-model="convocationForm.statut_convoc"
-                :options="statutsConvocation"
-                placeholder="Choisir un statut"
-            />
-        </div>
-
-        <div>
-            <label>Signature</label>
-
-            <div class="checkbox-line">
-                <Checkbox
-                    v-model="convocationForm.signature"
-                    binary
-                />
-
-                <span>
-                    Convocation signée
-                </span>
-            </div>
-        </div>
-
-        <div class="full">
-            <label>Motif</label>
-
-            <Textarea
-                v-model="convocationForm.motif"
-                rows="4"
-                autoResize
-            />
-        </div>
-
-        <div class="full">
-            <label>Commentaire</label>
-
-            <Textarea
-                v-model="convocationForm.commentaire_convoc"
-                rows="4"
-                autoResize
-            />
-        </div>
-
+      <div class="full">
+        <label>Commentaire interne</label>
+        <Textarea
+          v-model="convocationForm.commentaire_interne"
+          rows="3"
+          autoResize
+          placeholder="Note interne, non visible dans le courrier."
+        />
+      </div>
     </div>
 
     <template #footer>
+      <Button
+        label="Annuler"
+        severity="secondary"
+        outlined
+        @click="showEditDialog = false"
+      />
 
-        <Button
-            label="Annuler"
-            severity="secondary"
-            outlined
-            @click="showEditDialog = false"
-        />
-
-        <Button
-            label="Enregistrer"
-            icon="pi pi-check"
-            @click="modifierConvocation"
-        />
-
+      <Button
+        label="Enregistrer"
+        icon="pi pi-check"
+        @click="modifierConvocation"
+      />
     </template>
+  </Dialog>
 
-</Dialog>
+  <Dialog
+    v-model:visible="showDialog"
+    modal
+    header="Aperçu du courrier"
+    :style="{ width: '850px' }"
+  >
+    <div
+      v-if="selectedConvocation"
+      class="courrier-preview"
+    >
+      <p>
+        Madame / Monsieur
+        <strong>
+          {{ selectedConvocation.prenom_etudiant }}
+          {{ selectedConvocation.nom_etudiant }}
+        </strong>
+      </p>
 
-<Dialog
+      <h2>CONVOCATION</h2>
+
+      <p>Madame, Monsieur,</p>
+
+      <p>
+        Nous vous informons que votre situation d’assiduité nécessite un entretien
+        avec le département informatique.
+      </p>
+
+      <p>
+        Motif :
+        <strong>{{ selectedConvocation.motif }}</strong>
+      </p>
+
+      <div class="convocation-box">
+        <strong>
+          {{ formatDateCourrier(selectedConvocation.date_heure) }}
+          à
+          {{ formatHeureCourrier(selectedConvocation.date_heure) }}
+        </strong>
+
+        <p>
+          Lieu :
+          {{ selectedConvocation.lieu || 'Bureau du chef de département' }}
+        </p>
+      </div>
+
+      <p>
+        Votre présence est obligatoire. En cas d’absence non justifiée, des mesures
+        administratives complémentaires pourront être prises.
+      </p>
+
+      <p v-if="selectedConvocation.commentaire_convoc">
+        Commentaire :
+        {{ selectedConvocation.commentaire_convoc }}
+      </p>
+
+      <p>
+        Cordialement,
+        <br />
+        Le secrétariat pédagogique
+      </p>
+    </div>
+
+    <template #footer>
+      <Button
+        label="Fermer"
+        severity="secondary"
+        outlined
+        @click="showDialog = false"
+      />
+
+      <Button
+        label="Télécharger PDF"
+        icon="pi pi-download"
+      />
+    </template>
+  </Dialog>
+
+  <Dialog
     v-model:visible="showCreateDialog"
     modal
     header="Nouvelle Convocation"
     :style="{width: '750px'}"
->
+  >
     <div class="form-grid">
         <div class="full">
             <label>Dossier/ étudiant concerné</label>
@@ -605,7 +656,7 @@ onMounted(async () => {
               />
         </div>
 
-         <div>
+          <div>
             <label>Signature</label>
             <div class="checkbox-line">
                 <Checkbox
@@ -649,7 +700,7 @@ onMounted(async () => {
             @click="creerConvocation"
         />
     </template>
-</Dialog>
+  </Dialog>
 </template>
 
 <style scoped>
@@ -783,4 +834,37 @@ onMounted(async () => {
   gap: 8px;
 }
 
+.courrier-preview {
+  padding: 28px 38px;
+  background: white;
+  color: #111827;
+  font-family: Georgia, 'Times New Roman', serif;
+  line-height: 1.7;
+  font-size: 17px;
+}
+
+.courrier-preview h2 {
+  text-align: center;
+  margin: 32px 0;
+  font-size: 24px;
+  letter-spacing: 1px;
+}
+
+.convocation-box {
+  margin: 28px 0;
+  padding: 20px;
+  border-radius: 12px;
+  background: #eef6ff;
+  text-align: center;
+}
+
+.convocation-box strong {
+  display: block;
+  font-size: 18px;
+  margin-bottom: 8px;
+}
+
+.convocation-box p {
+  margin: 0;
+}
 </style>

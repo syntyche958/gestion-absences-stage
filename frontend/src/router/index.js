@@ -40,6 +40,12 @@ const routes = [
       {
         path: 'historique',
         component: HistoriqueView
+      },
+
+      {
+        path: '/administration',
+        name: 'administration',
+        component: () => import('../views/AdministrationView.vue')
       }
     ]
   }
