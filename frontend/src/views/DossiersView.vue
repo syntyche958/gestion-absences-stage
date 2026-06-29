@@ -253,6 +253,7 @@ onMounted(loadDossiers)
      </Column>
 
       <Column field="total_absences" header="Total absences" />
+      <Column field="total_injustifiees" header="Injustifiées" />
 
       <Column header="Actions">
             <template #body="slotProps">

@@ -132,9 +132,37 @@ onMounted(loadActions)
         </template>
       </Column>
 
-      <Column field="type_action" header="Type d'action" />
+      <Column header="Type d'action">
+        <template #body="slotProps">
+          <span v-if="slotProps.data.niveau_alerte === 'RAPPEL'">
+            Rappel de l'obligation d'assiduité
+          </span>
 
-      <Column field="moyenEnvoi" header="Moyen d'envoi" />
+          <span v-if="slotProps.data.niveau_alerte === 'AVERTISSEMENT'">
+            Avertissement
+          </span>
+
+          <span v-if="slotProps.data.niveau_alerte === 'SANCTION'">
+           Convocation direction / moyennes des UE non calculées
+          </span>
+        </template>
+      </Column>
+      
+      <Column header="Moyen d'envoi">
+        <template #body="slotProps">
+          <span v-if="slotProps.data.niveau_alerte === 'RAPPEL'">
+           Mail avec courier préalable
+          </span>
+
+          <span v-if="slotProps.data.niveau_alerte === 'AVERTISSEMENT'">
+            Courier recommanfé avec AR ou remise en main propre
+          </span>
+
+          <span v-if="slotProps.data.niveau_alerte === 'SANCTION'">
+           Lettre recommandée avec avis de réception
+          </span>
+        </template>
+      </Column>
 
       <Column header="Date envoi">
         <template #body="slotProps">
@@ -184,7 +212,7 @@ onMounted(loadActions)
 
                 <div>
                     <strong>Type d'action</strong>
-                    <p>{{ selectedAction.type_action }}</p>
+                    <p>{{ selectedAction.niveau_alerte }}</p>
                 </div>
 
                 <div>

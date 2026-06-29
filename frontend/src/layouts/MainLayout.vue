@@ -80,7 +80,7 @@ const logout = () => {
 
           <router-link to="/convocations">
             <i class="pi pi-file"></i>
-            <span>Convocations</span>
+            <span>Couriers administratifs</span>
           </router-link>
 
           <router-link to="/historique">
