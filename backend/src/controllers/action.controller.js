@@ -5,17 +5,46 @@ const getAllActions = async (req, res) => {
     try {
         const result = await pool.query(
             `SELECT
-                a.*,
+                d.id_dossier,
                 d.niveau_alerte,
+                d.statut_dossier,
+
                 e.nom_etudiant,
-                e.prenom_etudiant 
-            FROM "ActionAdministrative" a
-            JOIN "DossierAdministratif" d
-            ON a.id_dossier = d.id_dossier 
+                e.prenom_etudiant,
+
+                a.id_action,
+                a.type_action,
+                a.seuil,
+                a."moyenEnvoi",
+                a."dateEnvoi",
+                a.statut_action,
+                a.commentaire_action,
+                a.accuse_reception,
+                a.remise_main_propre,
+                a.signature_action
+
+            FROM "DossierAdministratif" d
+
             JOIN "Etudiant" e
             ON d.id_etudiant = e.id_etudiant
-            WHERE d.statut_dossier = 'EN_COURS' 
-            ORDER BY a."dateEnvoi" DESC`
+
+            LEFT JOIN LATERAL (
+                SELECT *
+                FROM "ActionAdministrative"
+                WHERE id_dossier = d.id_dossier
+                ORDER BY "dateEnvoi" DESC
+                LIMIT 1
+            ) a ON true
+
+            WHERE d.statut_dossier = 'EN_COURS'
+
+            ORDER BY
+                CASE
+                    WHEN d.niveau_alerte='SANCTION' THEN 1
+                    WHEN d.niveau_alerte='AVERTISSEMENT' THEN 2
+                    WHEN d.niveau_alerte='RAPPEL' THEN 3
+                    ELSE 4
+                END;`
         );
 
         res.status(200).json(result.rows);

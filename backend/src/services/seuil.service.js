@@ -19,11 +19,11 @@ const verifierSeuils = async (id_etudiant) => {
         let niveauAlerte = null;
 
         // Seuil 2
-        if (total === 2) {
+        if (total >= 2) {
             niveauAlerte = 'RAPPEL';
-        } else if (total === 4) {
+        } else if (total >= 4) {
             niveauAlerte = 'AVERTISSEMENT';
-        } else if (total === 5) {
+        } else if (total >= 5) {
             niveauAlerte = 'SANCTION';
         }
 
@@ -49,11 +49,11 @@ const verifierSeuils = async (id_etudiant) => {
         //cloturer les anciens dossiers EN_COURS de cet étudiant
         await pool.query(
             `UPDATE "DossierAdministratif"
-            SET status_dossier = 'CLOTURE',
+            SET statut_dossier = 'CLOTURE',
                 date_cloture= NOW()
             WHERE id_etudiant = $1
-            AND statut_dossier = 'EN_COURS',
-            `
+            AND statut_dossier = 'EN_COURS'
+            `,
             [id_etudiant]
         )
 
@@ -86,14 +86,14 @@ const verifierSeuils = async (id_etudiant) => {
 
         if (niveauAlerte === 'RAPPEL') {
             typeAction = "Rappel a l'obligation d'assiduité";
-            moyenEnvoi = 'Mail avec courier au préalable';
+            moyenEnvoi = 'Mail ou oral par le Directeur des études';
         } else if (niveauAlerte === 'AVERTISSEMENT') {
             typeAction = "Avertissement";
-            moyenEnvoi = 'Lettre recommandée avec avis de reception ou remise en main propre';
-        } else if (niveauAlerte === 'SANCTION') {
-            typeAction = "Convocation direction , les moyennes des UE ne seront pas calculées";
+            moyenEnvoi = 'Courrier recommandée avec avis de reception ou remise en main propre';
+        }/* else if (niveauAlerte === 'SANCTION') {
+            typeAction = "Convocation direction / moyennes des UE non calculées";
             moyenEnvoi = 'Lettre recommandée avec accusé de réception';
-        }
+        }*/
 
        const action = await pool.query(
             `INSERT INTO "ActionAdministrative"
@@ -136,7 +136,7 @@ const verifierSeuils = async (id_etudiant) => {
         await ajouterHistorique(
             nouveauDossier.rows[0].id_dossier,
             1,
-            'CREATION_DOSSIER',
+            'ACTION_ADMINISTRATIVE',
             `Dossier administrative ${typeAction} crée automatiquement.`
         );
 
