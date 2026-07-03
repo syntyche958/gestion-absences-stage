@@ -21,6 +21,7 @@ const dossiers = ref([])
 const search = ref('')
 const semestre = ref(null)
 const groupe = ref(null)
+const notificationsEtudiant = ref([])
 
 const showDialog = ref(false)
 const selectedStudent = ref(null)
@@ -28,9 +29,21 @@ const absencesEtudiant = ref([])
 const actionsEtudiant = ref([])
 const convocationsEtudiant = ref([])
 const historiqueEtudiant = ref([])
+const dossiersEtudiant = ref([])
 
 const semestres = ['S1', 'S2', 'S3', 'S4', 'S5', 'S6']
-const groupes = ['BUT1-A', 'BUT1-C', 'BUT2-A', 'BUT2-B', 'BUT3-A']
+const groupes = ['BUT1','BUT2', 'BUT3']
+
+const getStatutDossier = (dossier) =>{
+ const total = Number(dossier.total_injustifiees || 0)
+
+ if(total >= 5) return 'SANCTION'
+ if(total >= 4) return 'AVERTISSEMENT'
+ if(total >= 2) return 'RAPPEL'
+
+ return 'NORMAL'
+
+}
 
 const loadDossiers = async () => {
   const response = await api.get('/absences/suivi', {
@@ -41,6 +54,16 @@ const loadDossiers = async () => {
 
   dossiers.value = response.data
 }
+
+const notificationsParcours = computed(() => {
+  return getChronologieMetier()
+    .filter(event => event.titre?.startsWith('Notification'))
+    .map(event => ({
+      type_notif: event.titre.replace('Notification : ', ''),
+      message_notif: event.description,
+      date_envoi: new Date()
+    }))
+})
 
 const filteredDossiers = computed(() => {
   return dossiers.value.filter((dossier) => {
@@ -127,6 +150,119 @@ const getInitiales = (dossier) => {
   return `${dossier.nom_etudiant?.[0] || ''}${dossier.prenom_etudiant?.[0] || ''}`
 }
 
+const getChronologie = (etudiant) => {
+  const total = Number(etudiant.total_injustifiees)
+
+  return [
+    {
+      titre: 'Rappel',
+      seuil: '2 absences inustifiées',
+      fait: total >= 2
+    },
+    {
+      titre: 'Avertissement',
+      seuil: '4 absences inustifiées',
+      fait: total >= 4
+    },
+    {
+      titre: 'Sanction',
+      seuil: '5 absences inustifiées',
+      fait: total >= 5
+    },
+    {
+      titre: 'Démissionnaire de fait',
+      seuil: '5 jours ouvrés d’absences',
+      fait: false
+    }
+  ]
+}
+
+const getChronologieMetier = () => {
+  const events = []
+  const total = Number(selectedStudent.value?.total_injustifiees || 0)
+
+  const actionsTriees = [...actionsEtudiant.value].sort(
+    (a, b) => Number(a.seuil || 0) - Number(b.seuil || 0)
+  )
+
+  let dernierTotal = 0
+
+  if (actionsTriees.length > 0) {
+    actionsTriees.forEach((action) => {
+      const totalAction = Number(action.seuil || 0)
+      const nouvellesAbsences = totalAction - dernierTotal
+
+      if (nouvellesAbsences > 0) {
+        events.push({
+          titre: `Notification : +${nouvellesAbsences} absence(s)`,
+          description: `L'étudiant est passé de ${dernierTotal} à ${totalAction} absence(s) injustifiée(s).`,
+          statut: 'Cumul détecté',
+          type: 'warning',
+          fait: true
+        })
+      }
+
+      events.push({
+        titre: action.type_action,
+        description: `${action.type_action} déclenché à ${totalAction} absence(s) injustifiée(s).`,
+        statut: action.statut_action || 'Créé',
+        type: action.type_action?.toLowerCase().includes('rappel')
+          ? 'success'
+          : action.type_action?.toLowerCase().includes('avertissement')
+            ? 'warning'
+            : 'danger',
+        fait: true
+      })
+
+      dernierTotal = totalAction
+    })
+
+    return events
+  }
+
+  if (total >= 2) {
+    events.push({
+      titre: "Rappel d'assiduité",
+      description: `L'étudiant a atteint le seuil du rappel avec ${total} absence(s) injustifiée(s).`,
+      statut: 'À traiter',
+      type: 'warning',
+      fait: true
+    })
+  }
+
+  if (total >= 4) {
+    events.push({
+      titre: 'Avertissement',
+      description: `L'étudiant a dépassé le rappel et atteint le niveau avertissement avec ${total} absence(s).`,
+      statut: 'À traiter',
+      type: 'warning',
+      fait: true
+    })
+  }
+
+  if (total >= 5) {
+    events.push({
+      titre: 'Sanction / Direction',
+      description: `L'étudiant a atteint le niveau sanction avec ${total} absence(s) injustifiée(s).`,
+      statut: 'À traiter',
+      type: 'danger',
+      fait: true
+    })
+  }
+
+  if (events.length === 0) {
+    events.push({
+      titre: 'Aucun seuil atteint',
+      description: `Total actuel : ${total} absence(s) injustifiée(s).`,
+      statut: 'À surveiller',
+      type: 'disabled',
+      fait: false
+    })
+  }
+
+  return events
+}
+
 const voirEtudiant = async (etudiant) => {
   selectedStudent.value = etudiant
   showDialog.value = true
@@ -135,36 +271,61 @@ const voirEtudiant = async (etudiant) => {
     Authorization: `Bearer ${localStorage.getItem('token')}`
   }
 
-  const absencesResponse = await api.get(
-    `/absences/etudiant/${etudiant.id_etudiant}`,
-    { headers }
-  )
-
-  absencesEtudiant.value = absencesResponse.data
-
-  if (etudiant.id_dossier) {
-    const actionsResponse = await api.get(
-      `/actions/dossier/${etudiant.id_dossier}`,
+  try {
+    const absencesResponse = await api.get(
+      `/absences/etudiant/${etudiant.id_etudiant}`,
       { headers }
     )
 
-    const convocationsResponse = await api.get(
-      `/convocations/dossier/${etudiant.id_dossier}`,
-      { headers }
-    )
+    absencesEtudiant.value = absencesResponse.data
 
-    const historiqueResponse = await api.get(
-      `/historique/dossier/${etudiant.id_dossier}`,
-      { headers }
-    )
+    if (etudiant.id_dossier) {
+      const dossiersResponse = await api.get('/dossiers', { headers })
 
-    actionsEtudiant.value = actionsResponse.data
-    convocationsEtudiant.value = convocationsResponse.data
-    historiqueEtudiant.value = historiqueResponse.data
-  } else {
-    actionsEtudiant.value = []
-    convocationsEtudiant.value = []
-    historiqueEtudiant.value = []
+      const tousLesDossiersEtudiant = dossiersResponse.data.filter(
+        dossier => dossier.id_etudiant === etudiant.id_etudiant
+      )
+
+      const actionsResponses = await Promise.all(
+        tousLesDossiersEtudiant.map(dossier =>
+          api.get(`/actions/dossier/${dossier.id_dossier}`, { headers })
+        )
+      )
+
+      actionsEtudiant.value = actionsResponses.flatMap(response => response.data)
+
+      const convocationsResponse = await api.get(
+        `/convocations/dossier/${etudiant.id_dossier}`,
+        { headers }
+      )
+
+      const historiqueResponse = await api.get(
+        `/historique/dossier/${etudiant.id_dossier}`,
+        { headers }
+      )
+
+      actionsEtudiant.value = actionsResponse.data
+      convocationsEtudiant.value = convocationsResponse.data
+      historiqueEtudiant.value = historiqueResponse.data
+
+      try {
+        const notificationsResponse = await api.get(
+          `/notifications/dossier/${etudiant.id_dossier}`,
+          { headers }
+        )
+
+        notificationsEtudiant.value = notificationsResponse.data
+      } catch (error) {
+        notificationsEtudiant.value = []
+      }
+    } else {
+      notificationsEtudiant.value = []
+      actionsEtudiant.value = []
+      convocationsEtudiant.value = []
+      historiqueEtudiant.value = []
+    }
+  } catch (error) {
+    console.error(error)
   }
 }
 
@@ -242,10 +403,10 @@ onMounted(loadDossiers)
       <Column header="Statut">
         <template #body="slotProps">
             <Tag
-                :value="getStatut(Number(slotProps.data.total_injustifiees))"
+                :value="getStatutDossier(slotProps.data)"
                 :severity="
                     getSeverity(
-                        getStatut(Number(slotProps.data.total_injustifiees))
+                        getStatutDossier(slotProps.data)
                     )
                 "
             />
@@ -268,46 +429,126 @@ onMounted(loadDossiers)
     </DataTable>
   </div>
     <Dialog
-          v-model:visible="showDialog"
-          modal
-          header="Fiche étudiant"
-          :style="{ width: '900px' }"
-      >
-        <div v-if="selectedStudent" class="student-detail">
-            <div class="detail-avatar">
-                {{ getInitiales(selectedStudent) }}
+      v-model:visible="showDialog"
+      modal
+      header="Fiche étudiant"
+      :style="{ width: '900px' }"
+    >
+      <div v-if="selectedStudent" class="student-detail">
+        <div class="detail-avatar">
+          {{ getInitiales(selectedStudent) }}
+        </div>
+        <h2>
+          {{ selectedStudent.nom_etudiant }}
+          {{ selectedStudent.prenom_etudiant }}
+        </h2>
+
+        <Tag
+          :value="getStatutDossier(selectedStudent)"
+          :severity="getSeverity(getStatutDossier(selectedStudent))"
+        />
+
+        <div class="detail-grid">
+          <div>
+            <strong>Groupe</strong>
+            <p>{{ selectedStudent.groupe_td }}</p>
+          </div>
+
+          <div>
+            <strong>TP</strong>
+            <p>{{ selectedStudent.groupe_tp }}</p>
+          </div>
+
+          <div>
+            <strong>Semestre</strong>
+            <p>{{ selectedStudent.semestre }}</p>
+          </div>
+
+          <div>
+            <strong>Total absences</strong>
+            <p>{{ selectedStudent.total_absences }}</p>
+          </div>
+        </div>
+      </div>
+
+        <div class="timeline-card">
+          <h3>Chronologie administrative</h3>
+
+          <div
+            v-if="selectedStudent && getChronologieMetier(selectedStudent).length === 0"
+            class="empty-timeline"
+          >
+            Aucun événement administratif enregistré.
+          </div>
+
+          <div
+            v-else
+            class="timeline-pro"
+          >
+            <div
+              v-for="event in getChronologieMetier()"
+              :key="event.titre"
+              class="timeline-pro-item"
+            >
+              <div
+                class="timeline-icon"
+                :class="event.type"
+              >
+                <i
+                  class="pi"
+                  :class="{
+                    'pi-check' : event.fait,
+                    'pi-clock': !event.fait
+                  }"
+                ></i>
+              </div>
+
+              <div class="timeline-content " :class="event.type">
+                <div class="timeline-content-header">
+                  <h4>{{ event.titre }}</h4>
+
+                  <Tag
+                    :value="event.statut"
+                    :severity="
+                      event.type === 'warning'
+                        ? 'warning'
+                        : event.type === 'danger'
+                          ? 'danger'
+                          : 'info'
+                    "
+                  />
+                </div>
+
+                <p>{{ event.description }}</p>
+
+                <div class="timeline-meta">
+                 <span> {{ event.statut }} </span>
+                </div>
+              </div>
             </div>
-            <h2>
-                {{ selectedStudent.nom_etudiant }}
-                {{ selectedStudent.prenom_etudiant }}
-            </h2>
+          </div>
+        </div>
 
-            <Tag
-                :value="getStatut(Number(selectedStudent.total_injustifiees))"
-                :severity="getSeverity(getStatut(Number(selectedStudent.total_injustifiees)))"
-            />
+        <h3>Notifications du dossier</h3>
 
-           <div class="detail-grid">
-                <div>
-                    <strong>Groupe</strong>
-                    <p>{{ selectedStudent.groupe_td }}</p>
-                </div>
+        <div class="notif-list">
+          <div
+            v-for="notification in notificationsParcours"
+            :key="notification.message_notif"
+            class="notif-item"
+          >
+            <i class="pi pi-bell"></i>
 
-                <div>
-                    <strong>TP</strong>
-                    <p>{{ selectedStudent.groupe_tp }}</p>
-                </div>
-
-                <div>
-                    <strong>Semestre</strong>
-                    <p>{{ selectedStudent.semestre }}</p>
-                </div>
-
-                <div>
-                    <strong>Total absences</strong>
-                    <p>{{ selectedStudent.total_absences }}</p>
-                </div>
+            <div>
+              <strong>{{ notification.type_notif }}</strong>
+              <p>{{ notification.message_notif }}</p>
+              <small>{{ formatDate(notification.date_envoi) }}</small>
             </div>
+          </div>
+
+          <p v-if="notificationsParcours.length === 0" class="empty">
+            Aucune notification pour ce dossier.
+          </p>
         </div>
 
         <h3>Liste des absences</h3>
@@ -525,4 +766,153 @@ onMounted(loadDossiers)
   transform: scale(1.06);
   box-shadow: 0 4px 12px rgba(15, 23, 42, 0.18);
 }
+
+.timeline-card {
+  margin-top: 28px;
+  background: white;
+  border: 1px solid #e5e7eb;
+  border-radius: 18px;
+  padding: 26px;
+}
+
+.timeline-card h3 {
+  margin: 0 0 24px;
+  font-size: 22px;
+}
+
+.timeline-pro {
+  position: relative;
+  display: grid;
+  gap: 26px;
+}
+
+.timeline-pro::before {
+  content: '';
+  position: absolute;
+  left: 28px;
+  top: 20px;
+  bottom: 20px;
+  width: 2px;
+  background: #e5e7eb;
+}
+
+.timeline-pro-item {
+  position: relative;
+  display: grid;
+  grid-template-columns: 58px 1fr;
+  gap: 18px;
+  align-items: flex-start;
+}
+
+.timeline-icon {
+  z-index: 1;
+  width: 52px;
+  height: 52px;
+  border-radius: 999px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 20px;
+}
+
+.timeline-icon.success {
+  background: #dcfce7;
+  color: #16a34a;
+}
+
+.timeline-icon.warning {
+  background: #fef3c7;
+  color: #d97706;
+}
+
+.timeline-icon.info {
+  background: #dbeafe;
+  color: #2563eb;
+}
+
+.timeline-icon.danger {
+  background: #fee2e2;
+  color: #dc2626;
+}
+
+.timeline-content {
+  background: #f8fafc;
+  border: 1px solid #e5e7eb;
+  border-radius: 14px;
+  padding: 20px;
+}
+
+.timeline-content-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+}
+
+.timeline-content-header h4 {
+  margin: 0;
+  font-size: 18px;
+}
+
+.timeline-content p {
+  margin: 10px 0 14px;
+  color: #475569;
+}
+
+.timeline-meta {
+  display: flex;
+  gap: 10px;
+  color: #64748b;
+  font-size: 14px;
+}
+
+.empty-timeline {
+  background: #f8fafc;
+  color: #64748b;
+  padding: 20px;
+  border-radius: 12px;
+}
+
+.timeline-icon.disabled {
+  background: #f1f5f9;
+  color: #94a3b8;
+}
+
+.timeline-content.disabled {
+  opacity: 0.65;
+}
+
+.notif-list {
+  display: grid;
+  gap: 12px;
+  margin-bottom: 24px;
+}
+
+.notif-item {
+  display: flex;
+  gap: 14px;
+  background: #fff7ed;
+  border: 1px solid #fed7aa;
+  padding: 14px;
+  border-radius: 12px;
+}
+
+.notif-item i {
+  color: #f97316;
+  font-size: 20px;
+}
+
+.notif-item p {
+  margin: 6px 0;
+  color: #475569;
+}
+
+.notif-item small {
+  color: #64748b;
+}
+
+.empty {
+  color: #64748b;
+}
+
 </style>

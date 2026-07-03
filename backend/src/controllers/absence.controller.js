@@ -166,9 +166,27 @@ const getAbsencesByEtudiant = async (req, res) => {
     }
 };
 
+const recalculerSeuilsTousEtudiants = async (req, res) => {
+  try {
+    const etudiants = await pool.query(`SELECT id_etudiant FROM "Etudiant"`)
+
+    for (const etudiant of etudiants.rows) {
+      await verifierSeuils(etudiant.id_etudiant)
+    }
+
+    res.status(200).json({
+      message: 'Seuils recalculés pour tous les étudiants'
+    })
+  } catch (error) {
+    console.error(error)
+    res.status(500).json({ message: 'Erreur serveur' })
+  }
+}
+
 module.exports = {
     createAbsence,
     getAllAbsences,
     getSuiviAbsences,
-    getAbsencesByEtudiant
+    getAbsencesByEtudiant,
+    recalculerSeuilsTousEtudiants
 };

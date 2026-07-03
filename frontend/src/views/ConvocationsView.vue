@@ -1,5 +1,7 @@
 <script setup>
 import { ref, onMounted, computed } from 'vue'
+import CourrierAR from '../components/courriers/CourrierAR.vue'
+import CourrierMainPropre from '../components/courriers/CourrierMainPropre.vue'
 
 import DataTable from 'primevue/datatable'
 import Column from 'primevue/column'
@@ -11,60 +13,30 @@ import Select from 'primevue/select'
 import Textarea from 'primevue/textarea'
 import Checkbox from 'primevue/checkbox'
 import DatePicker from 'primevue/datepicker'
-import {useToast} from 'primevue/usetoast'
+import RadioButton from 'primevue/radiobutton'
+import { useToast } from 'primevue/usetoast'
 
 import api from '../services/api'
 
-const convocations = ref([])
-const showDialog = ref(false)
-const showEditDialog = ref(false)
-const selectedConvocation = ref(null)
-const convocationForm = ref({})
-const showCreateDialog = ref(false)
 const toast = useToast()
+
+const convocations = ref([])
+const dossiers = ref([])
 const search = ref('')
 
-const filteredConvocations = computed(() => {
-  return convocations.value.filter((convocation)=>{
-    const texte = `
-      ${convocation.nom_etudiant || ''}
-      ${convocation.prenom_etudiant || ''}
-      ${convocation.motif || ''}
-      ${convocation.statut_convoc || ''}
-    `
-      .toLowerCase()
+const showDialog = ref(false)
+const showEditDialog = ref(false)
+const showCreateDialog = ref(false)
+const ouvertureDepuisWorkflow = ref(false)
 
-      return texte.includes(search.value.toLowerCase())
-  })
-})
+const selectedConvocation = ref(null)
+const convocationForm = ref({})
 
-const nouvelleConvocation = ref({
-    date_heure: null,
-    heure: '',
-    statut_convoc: 'GENEREE',
-    motif: '',
-    signature: false,
-    commentaire_convoc: '',
-    id_utilisateur: 1,
-    id_dossier: null,
-    id_action: null
-})
-
-const dossiers = ref([])
-
-const loadDossiers = async () => {
-    const response = await api.get('/dossiers', {
-        headers: {
-            Authorization: `Bearer ${localStorage.getItem('token')}`
-        }
-    })
-
-    dossiers.value = response.data.filter(
-      dossier =>
-        dossier.statut_dossier === 'EN_COURS' &&
-        dossier.niveau_alerte === 'SANCTION'
-    )
-}
+const responsables = [
+  'Chef de département',
+  'Directeur des études',
+  'Directeur IUT'
+]
 
 const statutsConvocation = [
   'GENEREE',
@@ -75,19 +47,81 @@ const statutsConvocation = [
   'ANNULEE'
 ]
 
+const nouvelleConvocation = ref({
+  date_heure: null,
+  heure: '',
+  statut_convoc: 'GENEREE',
+  motif: '',
+  signature: false,
+  commentaire_convoc: '',
+  id_utilisateur: 1,
+  id_dossier: null,
+  id_action: null
+})
+
+const filteredConvocations = computed(() => {
+  return convocations.value.filter((convocation) => {
+    const texte = `
+      ${convocation.nom_etudiant || ''}
+      ${convocation.prenom_etudiant || ''}
+      ${convocation.motif || ''}
+      ${convocation.statut_convoc || ''}
+      ${convocation.mode_envoi || ''}
+    `.toLowerCase()
+
+    return texte.includes(search.value.toLowerCase())
+  })
+})
+
+const getHeaders = () => ({
+  Authorization: `Bearer ${localStorage.getItem('token')}`
+})
+
 const loadConvocations = async () => {
   const response = await api.get('/convocations', {
-    headers: {
-      Authorization: `Bearer ${localStorage.getItem('token')}`
-    }
+    headers: getHeaders()
   })
 
   convocations.value = response.data
 }
 
+const loadDossiers = async () => {
+  const response = await api.get('/dossiers', {
+    headers: getHeaders()
+  })
+
+  dossiers.value = response.data.filter(
+    dossier =>
+      dossier.statut_dossier === 'EN_COURS' &&
+      dossier.niveau_alerte === 'SANCTION'
+  )
+}
+
 const formatDate = (date) => {
   if (!date) return 'À planifier'
   return new Date(date).toLocaleString('fr-FR')
+}
+
+const extraireHeure = (date) => {
+  if (!date) return ''
+
+  const d = new Date(date)
+  const heures = String(d.getHours()).padStart(2, '0')
+  const minutes = String(d.getMinutes()).padStart(2, '0')
+
+  return `${heures}:${minutes}`
+}
+
+const formatDateForBackend = (date, heure) => {
+  if (!date) return null
+
+  const d = new Date(date)
+  const year = d.getFullYear()
+  const month = String(d.getMonth() + 1).padStart(2, '0')
+  const day = String(d.getDate()).padStart(2, '0')
+  const heureFinale = heure || '00:00'
+
+  return `${year}-${month}-${day} ${heureFinale}:00`
 }
 
 const getSeverity = (statut) => {
@@ -100,140 +134,187 @@ const getSeverity = (statut) => {
   return 'secondary'
 }
 
-const extraireHeure = (date) => {
-  if (!date) return ''
+const getTotalAbsencesCourrier = (convocation) => {
+  return (
+    convocation.seuil ||
+    convocation.total_injustifiees ||
+    convocation.total_absences_traitees ||
+    'X'
+  )
+}
 
-  const d = new Date(date)
+const getObjetCourrier = (convocation) => {
+  const total = getTotalAbsencesCourrier(convocation)
 
-  const heures = String(d.getHours()).padStart(2, '0')
-  const minutes = String(d.getMinutes()).padStart(2, '0')
+  if (convocation.objet) return convocation.objet
 
-  return `${heures}:${minutes}`
+  if (convocation.niveau_alerte === 'RAPPEL' || convocation.type_courrier === 'Rappel') {
+    return `Rappel à l'obligation d'assiduité suite à ${total} absence(s) injustifiée(s)`
+  }
+
+  if (
+    convocation.niveau_alerte === 'AVERTISSEMENT' ||
+    convocation.type_courrier === 'Avertissement'
+  ) {
+    return `Avertissement à la suite de ${total} absence(s) injustifiée(s)`
+  }
+
+  if (convocation.niveau_alerte === 'SANCTION') {
+    return 'Convocation Direction / Moyennes des UE non calculées'
+  }
+
+  return convocation.motif || ''
+}
+
+const construireConvocationPreview = (convocation) => {
+  const objet = getObjetCourrier(convocation)
+
+  return {
+    ...convocation,
+    objet,
+    motif: convocation.motif || objet,
+    seuil: getTotalAbsencesCourrier(convocation)
+  }
 }
 
 const voirConvocation = (convocation) => {
-  selectedConvocation.value = convocation
+  selectedConvocation.value = construireConvocationPreview(convocation)
   showDialog.value = true
 }
 
 const ouvrirModification = (convocation) => {
   convocationForm.value = {
     ...convocation,
-    date_heure: convocation.date_heure
-      ? new Date(convocation.date_heure)
-      : null,
+    date_heure: convocation.date_heure ? new Date(convocation.date_heure) : null,
     heure: extraireHeure(convocation.date_heure),
-    lieu: convocation.lieu || 'Bureau du chef de département',
-    disponibilites: convocation.disponibilites || '',
-    commentaire_interne: convocation.commentaire_interne || ''
+    lieu: convocation.lieu || '',
+    commentaire_interne: convocation.commentaire_interne || '',
+    mode_envoi: convocation.mode_envoi || 'Courrier recommandé avec AR',
+    type_courrier: convocation.type_courrier || 'Avertissement',
+    responsable: convocation.responsable || 'Chef de département',
+    objet: getObjetCourrier(convocation),
+    motif: convocation.motif || getObjetCourrier(convocation),
+    seuil: getTotalAbsencesCourrier(convocation)
   }
 
   showEditDialog.value = true
 }
 
-const formatDateForBackend = (date, heure) => {
-  if (!date) return null
-
-  const d = new Date(date)
-
-  const year = d.getFullYear()
-  const month = String(d.getMonth() + 1).padStart(2, '0')
-  const day = String(d.getDate()).padStart(2, '0')
-
-  const heureFinale = heure || '00:00'
-
-  return `${year}-${month}-${day} ${heureFinale}:00`
-}
-
 const modifierConvocation = async () => {
+  
+  const dateBackend = formatDateForBackend(
+    convocationForm.value.date_heure,
+    convocationForm.value.heure
+  )
+
   await api.put(
     `/convocations/${convocationForm.value.id_convocation}`,
     {
-      date_heure: formatDateForBackend(
-        convocationForm.value.date_heure,
-        convocationForm.value.heure
-      ),
+      date_heure: dateBackend,
       statut_convoc: convocationForm.value.statut_convoc,
       motif: convocationForm.value.motif,
       signature: convocationForm.value.signature,
-      commentaire_convoc: convocationForm.value.commentaire_convoc
+      commentaire_convoc: convocationForm.value.commentaire_convoc,
+      lieu: convocationForm.value.lieu,
+      mode_envoi: convocationForm.value.mode_envoi,
+      commentaire_interne: convocationForm.value.commentaire_interne,
+      responsable: convocationForm.value.responsable
     },
     {
-      headers: {
-        Authorization: `Bearer ${localStorage.getItem('token')}`
-      }
+      headers: getHeaders()
+    }
+  )
+
+  selectedConvocation.value = {
+    ...convocationForm.value,
+    date_heure: dateBackend
+  }
+
+  toast.add({
+    severity: 'success',
+    summary: 'Succès',
+    detail: 'Courrier modifié avec succès',
+    life: 3000
+  })
+
+  showEditDialog.value = false
+  ouvertureDepuisWorkflow.value = false
+  await loadConvocations()
+}
+
+const envoyerCourrier = async (convocation) => {
+  if (!confirm('Confirmer l’envoi de ce courrier ?')) return
+
+  await api.put(
+    `/convocations/${convocation.id_convocation}`,
+    {
+      date_heure: convocation.date_heure,
+      statut_convoc: 'ENVOYEE',
+      motif: convocation.motif,
+      signature: convocation.signature,
+      commentaire_convoc: convocation.commentaire_convoc,
+      lieu: convocation.lieu,
+      mode_envoi: convocation.mode_envoi,
+      commentaire_interne: convocation.commentaire_interne,
+      responsable: convocation.responsable
+    },
+    {
+      headers: getHeaders()
     }
   )
 
   toast.add({
     severity: 'success',
-    summary: 'succès',
-    detail: 'Convocation modifiée avec succès',
+    summary: 'Courrier envoyé',
+    detail: 'Le statut du courrier est passé à ENVOYEE.',
     life: 3000
   })
 
-  showEditDialog.value = false
+  ouvertureDepuisWorkflow.value = false
   await loadConvocations()
 }
 
 const ouvrirCreation = () => {
-    nouvelleConvocation.value = {
-      date_heure: null,
-      heure: '',
-      statut_convoc: 'GENEREE',
-      motif: '',
-      signature: false,
-      commentaire_convoc: '',
-      id_utilisateur: 1,
-      id_dossier: null,
-      id_action: null
-    }
-    
-    showCreateDialog.value = true
+  nouvelleConvocation.value = {
+    date_heure: null,
+    heure: '',
+    statut_convoc: 'GENEREE',
+    motif: '',
+    signature: false,
+    commentaire_convoc: '',
+    id_utilisateur: 1,
+    id_dossier: null,
+    id_action: null
+  }
+
+  showCreateDialog.value = true
 }
 
-const creerConvocation = async () => { 
+const creerConvocation = async () => {
   try {
-    await api.post('/convocations', {
-      date_heure: formatDateForBackend(
-        nouvelleConvocation.value.date_heure,
-        nouvelleConvocation.value.heure
-      ),
-      statut_convoc: nouvelleConvocation.value.statut_convoc,
-      motif: nouvelleConvocation.value.motif,
-      signature: nouvelleConvocation.value.signature,
-      commentaire_convoc: nouvelleConvocation.value.commentaire_convoc,
-      id_utilisateur: nouvelleConvocation.value.id_utilisateur,
-      id_dossier: nouvelleConvocation.value.id_dossier
-    },
-    {
-      headers: {
-        Authorization: `Bearer ${localStorage.getItem('token')}`
+    await api.post(
+      '/convocations',
+      {
+        date_heure: formatDateForBackend(
+          nouvelleConvocation.value.date_heure,
+          nouvelleConvocation.value.heure
+        ),
+        statut_convoc: nouvelleConvocation.value.statut_convoc,
+        motif: nouvelleConvocation.value.motif,
+        signature: nouvelleConvocation.value.signature,
+        commentaire_convoc: nouvelleConvocation.value.commentaire_convoc,
+        id_utilisateur: nouvelleConvocation.value.id_utilisateur,
+        id_dossier: nouvelleConvocation.value.id_dossier
+      },
+      {
+        headers: getHeaders()
       }
-    })
-
-    if (nouvelleConvocation.value.id_action) {
-      await api.put(
-        `/actions/${nouvelleConvocation.value.id_action}`, 
-        {
-          statut_action: 'TERMINEE',
-          accuse_reception: false,
-          remise_main_propre: false,
-          signature_action: false,
-          commentaire_action: 'ACtion terminée après création de ma convocation.'
-        },
-        {
-          headers: {
-            Authorization: `Bearer ${localStorage.getItem('token')}`
-          }
-        }
-      )
-    }
+    )
 
     toast.add({
       severity: 'success',
-      summary: 'succès',
-      detail: 'Convocation créée avec succès',
+      summary: 'Succès',
+      detail: 'Courrier créé avec succès',
       life: 3000
     })
 
@@ -243,212 +324,223 @@ const creerConvocation = async () => {
     toast.add({
       severity: 'warn',
       summary: 'Attention',
-      detail: error.response?.data?.message || 'Impossible de créer la convocation',
+      detail: error.response?.data?.message || 'Impossible de créer le courrier',
       life: 3000
     })
   }
 }
 
-const supprimerCOnvocation = async (convocation) =>{
-  if (!confirm('Voulez-vous vraiment supprimer cette convocation ?')) {
-    return
-  }
+const supprimerConvocation = async (convocation) => {
+  if (!confirm('Voulez-vous vraiment supprimer ce courrier ?')) return
 
   await api.delete(`/convocations/${convocation.id_convocation}`, {
-    headers: {
-      Authorization: `Bearer ${localStorage.getItem('token')}`
-    }
+    headers: getHeaders()
   })
 
   toast.add({
     severity: 'success',
     summary: 'Succès',
-    detail: 'Convocation supprimée avec succès',
+    detail: 'Courrier supprimé avec succès',
     life: 3000
   })
 
   await loadConvocations()
 }
 
-const formatDateCourrier = (date) => {
-  if (!date) return 'Date à planifier'
+const ouvrirDepuisSuiviAdministratif = async () => {
+  const prefill = localStorage.getItem('courrier_prefill')
+  if (!prefill) return
 
-  return new Date(date).toLocaleDateString('fr-FR', {
-    weekday: 'long',
-    day: 'numeric',
-    month: 'long',
-    year: 'numeric'
-  })
-}
+  const data = JSON.parse(prefill)
 
-const formatHeureCourrier = (date) => {
-  if (!date) return 'Heure à définir'
+  await loadConvocations()
 
-  return new Date(date).toLocaleTimeString('fr-FR', {
-    hour: '2-digit',
-    minute: '2-digit'
-  })
+  let courrierExiste = convocations.value.find(
+    c => c.id_dossier === data.id_dossier
+  )
+
+  if (!courrierExiste) {
+    await api.post(
+      '/convocations',
+      {
+        date_heure: null,
+        statut_convoc: 'GENEREE',
+        motif:
+          data.niveau === 'RAPPEL'
+            ? "Rappel à l'obligation d'assiduité"
+            : "Avertissement à la suite d'absences injustifiées.",
+        signature: false,
+        commentaire_convoc: '',
+        id_utilisateur: 1,
+        id_dossier: data.id_dossier,
+        mode_envoi:
+          data.niveau === 'RAPPEL'
+            ? 'Mail'
+            : 'Courrier recommandé avec AR',
+        type_courrier:
+          data.niveau === 'RAPPEL'
+            ? 'Rappel'
+            : 'Avertissement',
+        responsable:
+          data.niveau === 'RAPPEL'
+            ? 'Directeur des études'
+            : 'Chef de département'
+      },
+      {
+        headers: getHeaders()
+      }
+    )
+
+    await loadConvocations()
+
+    courrierExiste = convocations.value.find(
+      c => c.id_dossier === data.id_dossier
+    )
+  }
+
+  if (courrierExiste) {
+    ouvertureDepuisWorkflow.value = true
+    ouvrirModification(courrierExiste)
+  }
+
+  localStorage.removeItem('courrier_prefill')
 }
 
 onMounted(async () => {
   await loadConvocations()
   await loadDossiers()
-
-  const prefill = localStorage.getItem('convocation_prefill')
-
-  if (prefill) {
-    const data = JSON.parse(prefill)
-
-    nouvelleConvocation.value= {
-      date_heure: null,
-      heure: '',
-      statut_convoc: 'GENEREE',
-      motif: data.motif,
-      signature: false,
-      commentaire_convoc: '',
-      id_utilisateur: 1,
-      id_dossier: data.id_dossier,
-      id_action: data.id_action
-    }
-
-    showCreateDialog.value=true
-    localStorage.removeItem('convocation_prefill')
-  }
-
+  await ouvrirDepuisSuiviAdministratif()
 })
 </script>
 
 <template>
   <div class="page-header">
     <div>
-      <h1>Convocations</h1>
-      <p>Gestion des convocations générées après les seuils d'absences</p>
+      <h1>Courriers administratifs</h1>
+      <p>Préparation et suivi des courriers liés aux absences</p>
     </div>
   </div>
 
-  <div class="filters">
-    <InputText
-      v-model ="search"
-      placeholder="Rechercher une convocation..."
-    />
-    <!-- <Button
-      label="Nouvelle convocation"
-      icon="pi pi-plus"
-      @click="ouvrirCreation"
-    /> -->
-  </div>
+  <div v-if="!ouvertureDepuisWorkflow">
+    <div class="filters">
+      <InputText
+        v-model="search"
+        placeholder="Rechercher un courrier..."
+      />
+    </div>
 
-  <div class="table-card">
-    <DataTable
-      :value="filteredConvocations"
-      paginator
-      :rows="10"
-      stripedRows
-    >
-      <Column header="Étudiant">
-        <template #body="slotProps">
-          <strong>
-            {{ slotProps.data.nom_etudiant }}
-            {{ slotProps.data.prenom_etudiant }}
-          </strong>
-        </template>
-      </Column>
+    <div class="table-card">
+      <DataTable
+        :value="filteredConvocations"
+        paginator
+        :rows="10"
+        stripedRows
+      >
+        <Column header="Étudiant">
+          <template #body="slotProps">
+            <strong>
+              {{ slotProps.data.nom_etudiant }}
+              {{ slotProps.data.prenom_etudiant }}
+            </strong>
+          </template>
+        </Column>
 
-      <Column field="motif" header="Motif" />
+        <Column header="Type de courrier">
+          <template #body="slotProps">
+            <span v-if="slotProps.data.type_courrier">
+              {{ slotProps.data.type_courrier }}
+            </span>
+            <span v-else>
+              {{ slotProps.data.motif }}
+            </span>
+          </template>
+        </Column>
 
-      <Column header="Date">
-        <template #body="slotProps">
-          {{ formatDate(slotProps.data.date_heure) }}
-        </template>
-      </Column>
+        <Column header="Mode d'envoi">
+          <template #body="slotProps">
+            {{ slotProps.data.mode_envoi || 'À définir' }}
+          </template>
+        </Column>
 
-      <Column header="Statut">
-        <template #body="slotProps">
-          <Tag
-            :value="slotProps.data.statut_convoc"
-            :severity="getSeverity(slotProps.data.statut_convoc)"
-          />
-        </template>
-      </Column>
+        <Column header="Date">
+          <template #body="slotProps">
+            {{ formatDate(slotProps.data.date_heure) }}
+          </template>
+        </Column>
 
-      <Column header="Signature">
-        <template #body="slotProps">
-          <Tag
-            :value="slotProps.data.signature ? 'Signée' : 'Non signée'"
-            :severity="slotProps.data.signature ? 'success' : 'warning'"
-          />
-        </template>
-      </Column>
-
-      <Column header="Actions">
-        <template #body="slotProps">
-          <div class="action-buttons">
-            <Button
-              icon="pi pi-eye"
-              rounded
-              text
-              @click="voirConvocation(slotProps.data)"
+        <Column header="Statut">
+          <template #body="slotProps">
+            <Tag
+              :value="slotProps.data.statut_convoc"
+              :severity="getSeverity(slotProps.data.statut_convoc)"
             />
-            <Button
-              icon="pi pi-pencil"
-              rounded
-              text
-              severity="warning"
-              @click="ouvrirModification(slotProps.data)"
+          </template>
+        </Column>
+
+        <Column header="Signature">
+          <template #body="slotProps">
+            <Tag
+              :value="slotProps.data.signature ? 'Signée' : 'Non signée'"
+              :severity="slotProps.data.signature ? 'success' : 'warning'"
             />
-            <Button
-              icon="pi pi-trash"
-              rounded
-              text
-              severity="danger"
-              @click="supprimerCOnvocation(slotProps.data)"
-            />
-          </div>
-        </template>
-      </Column>
-    </DataTable>
+          </template>
+        </Column>
+
+        <Column header="Actions">
+          <template #body="slotProps">
+            <div class="action-buttons">
+              <Button
+                icon="pi pi-eye"
+                rounded
+                text
+                @click="voirConvocation(slotProps.data)"
+              />
+
+              <Button
+                icon="pi pi-pencil"
+                rounded
+                text
+                severity="warning"
+                @click="ouvrirModification(slotProps.data)"
+              />
+
+              <Button
+                v-if="slotProps.data.statut_convoc !== 'ENVOYEE'"
+                icon="pi pi-send"
+                rounded
+                text
+                severity="success"
+                @click="envoyerCourrier(slotProps.data)"
+              />
+
+              <Button
+                icon="pi pi-trash"
+                rounded
+                text
+                severity="danger"
+                @click="supprimerConvocation(slotProps.data)"
+              />
+            </div>
+          </template>
+        </Column>
+      </DataTable>
+    </div>
   </div>
 
   <Dialog
     v-model:visible="showEditDialog"
     modal
-    header="Préparer la convocation"
+    header="Préparer le courrier administratif"
     :style="{ width: '800px' }"
   >
     <div class="form-grid">
       <div>
-        <label>Date de convocation</label>
+        <label>Date du courrier</label>
         <DatePicker
           v-model="convocationForm.date_heure"
           dateFormat="dd/mm/yy"
           showIcon
           placeholder="Choisir une date"
-        />
-      </div>
-
-      <div>
-        <label>Heure</label>
-        <InputText
-          v-model="convocationForm.heure"
-          placeholder="10:30"
-        />
-      </div>
-
-      <div class="full">
-        <label>Lieu</label>
-        <InputText
-          v-model="convocationForm.lieu"
-          placeholder="Bureau du chef de département"
-        />
-      </div>
-
-      <div class="full">
-        <label>Disponibilités / créneaux proposés</label>
-        <Textarea
-          v-model="convocationForm.disponibilites"
-          rows="3"
-          autoResize
-          placeholder="Ex : Lundi 10h-12h, mardi 14h-16h..."
         />
       </div>
 
@@ -461,6 +553,47 @@ onMounted(async () => {
         />
       </div>
 
+      <div class="full">
+        <label>Responsable</label>
+        <Select
+          v-model="convocationForm.responsable"
+          :options="responsables"
+          placeholder="Choisir un responsable"
+        />
+      </div>
+
+      <div class="full">
+        <label>Mode d'envoi</label>
+
+        <div class="radio-group">
+          <div class="radio-item">
+            <RadioButton
+              v-model="convocationForm.mode_envoi"
+              inputId="ar"
+              value="Courrier recommandé avec AR"
+            />
+            <label for="ar">Courrier recommandé avec AR</label>
+          </div>
+
+          <div class="radio-item">
+            <RadioButton
+              v-model="convocationForm.mode_envoi"
+              inputId="mainPropre"
+              value="Remise en main propre"
+            />
+            <label for="mainPropre">Remise en main propre</label>
+          </div>
+        </div>
+      </div>
+
+      <div class="full">
+        <label>Objet du courrier</label>
+        <InputText
+          v-model="convocationForm.objet"
+          placeholder="Objet du courrier"
+        />
+      </div>
+
       <div>
         <label>Signature</label>
         <div class="checkbox-line">
@@ -468,7 +601,7 @@ onMounted(async () => {
             v-model="convocationForm.signature"
             binary
           />
-          <span>Convocation signée</span>
+          <span>Courrier signé</span>
         </div>
       </div>
 
@@ -487,7 +620,6 @@ onMounted(async () => {
           v-model="convocationForm.commentaire_convoc"
           rows="3"
           autoResize
-          placeholder="Ex : Merci de vous présenter avec vos justificatifs."
         />
       </div>
 
@@ -497,7 +629,7 @@ onMounted(async () => {
           v-model="convocationForm.commentaire_interne"
           rows="3"
           autoResize
-          placeholder="Note interne, non visible dans le courrier."
+          placeholder="Visible uniquement par l'administration"
         />
       </div>
     </div>
@@ -522,184 +654,17 @@ onMounted(async () => {
     v-model:visible="showDialog"
     modal
     header="Aperçu du courrier"
-    :style="{ width: '850px' }"
+    :style="{ width: '900px' }"
   >
-    <div
-      v-if="selectedConvocation"
-      class="courrier-preview"
-    >
-      <p>
-        Madame / Monsieur
-        <strong>
-          {{ selectedConvocation.prenom_etudiant }}
-          {{ selectedConvocation.nom_etudiant }}
-        </strong>
-      </p>
+    <CourrierAR
+      v-if="selectedConvocation?.mode_envoi === 'Courrier recommandé avec AR'"
+      :convocation="selectedConvocation"
+    />
 
-      <h2>CONVOCATION</h2>
-
-      <p>Madame, Monsieur,</p>
-
-      <p>
-        Nous vous informons que votre situation d’assiduité nécessite un entretien
-        avec le département informatique.
-      </p>
-
-      <p>
-        Motif :
-        <strong>{{ selectedConvocation.motif }}</strong>
-      </p>
-
-      <div class="convocation-box">
-        <strong>
-          {{ formatDateCourrier(selectedConvocation.date_heure) }}
-          à
-          {{ formatHeureCourrier(selectedConvocation.date_heure) }}
-        </strong>
-
-        <p>
-          Lieu :
-          {{ selectedConvocation.lieu || 'Bureau du chef de département' }}
-        </p>
-      </div>
-
-      <p>
-        Votre présence est obligatoire. En cas d’absence non justifiée, des mesures
-        administratives complémentaires pourront être prises.
-      </p>
-
-      <p v-if="selectedConvocation.commentaire_convoc">
-        Commentaire :
-        {{ selectedConvocation.commentaire_convoc }}
-      </p>
-
-      <p>
-        Cordialement,
-        <br />
-        Le secrétariat pédagogique
-      </p>
-    </div>
-
-    <template #footer>
-      <Button
-        label="Fermer"
-        severity="secondary"
-        outlined
-        @click="showDialog = false"
-      />
-
-      <Button
-        label="Télécharger PDF"
-        icon="pi pi-download"
-      />
-    </template>
-  </Dialog>
-
-  <Dialog
-    v-model:visible="showCreateDialog"
-    modal
-    header="Nouvelle Convocation"
-    :style="{width: '750px'}"
-  >
-    <div class="form-grid">
-        <div class="full">
-            <label>Dossier/ étudiant concerné</label>
-            <Select
-                v-model="nouvelleConvocation.id_dossier"
-                :options="dossiers"
-                optionLabel="nom_etudiant"
-                optionValue="id_dossier"
-                placeholder="Choisir un dossier"
-            >
-                <template #option="slotProps">
-                    {{ slotProps.option.nom_etudiant }}
-                    {{ slotProps.option.prenom_etudiant }}
-                    -
-                    {{ slotProps.option.niveau_alerte }}
-                </template>
-
-                <template #value="slotProps">
-                    <span v-if="slotProps.value">
-                        Dossier sélectionné
-                    </span>
-                    <span v-else>
-                        Choisir un dossier
-                    </span>
-                </template>
-            </Select>
-        </div>
-
-        <div>
-            <label>Date de convocation</label>
-            <DatePicker
-                v-model="nouvelleConvocation.date_heure"
-                dateFormat="dd/mm/yy"
-                showIcon
-                placeholder="Choisir une date"
-            />
-        </div>
-
-        <div>
-            <label>Heure</label>
-            <InputText
-                v-model="nouvelleConvocation.heure"
-                placeholder="10:30"
-            />
-        </div>
-
-        <div>
-            <label>Statut</label>
-            <Select
-              v-model="nouvelleConvocation.statut_convoc"
-              :options="statutsConvocation"
-              placeholder="Choisir un statut"
-              />
-        </div>
-
-          <div>
-            <label>Signature</label>
-            <div class="checkbox-line">
-                <Checkbox
-                    v-model="nouvelleConvocation.signature"
-                    binary
-                />
-                <span>Convocation signée</span>
-            </div>
-        </div>
-
-        <div class="full">
-            <label>Motif</label>
-            <Textarea
-                v-model="nouvelleConvocation.motif"
-                rows="4"
-                autoResize
-            />
-        </div>
-
-        <div class="full">
-            <label>Commentaire</label>
-            <Textarea
-                v-model="nouvelleConvocation.commentaire_convoc"
-                rows="4"
-                autoResize
-            />
-        </div>
-    </div>
-
-    <template #footer>
-        <Button
-            label="Annuler"
-            severity="secondary"
-            outlined
-            @click="showCreateDialog = false" 
-        />
-
-        <Button
-            label="Créer"
-            icon="pi pi-check"
-            @click="creerConvocation"
-        />
-    </template>
+    <CourrierMainPropre
+      v-else
+      :convocation="selectedConvocation"
+    />
   </Dialog>
 </template>
 
@@ -709,9 +674,6 @@ onMounted(async () => {
   margin: -32px -32px 28px;
   padding: 32px 40px;
   border-bottom: 1px solid #e5e7eb;
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
 }
 
 .page-header h1 {
@@ -722,6 +684,15 @@ onMounted(async () => {
 .page-header p {
   margin: 8px 0 0;
   color: #64748b;
+}
+
+.filters {
+  display: flex;
+  margin-bottom: 24px;
+}
+
+.filters :deep(.p-inputtext) {
+  width: 420px;
 }
 
 .table-card {
@@ -747,33 +718,10 @@ onMounted(async () => {
   padding: 6px 12px;
 }
 
-.detail-grid {
-  display: grid;
-  grid-template-columns: repeat(2, 1fr);
-  gap: 20px;
-}
-
-.detail-grid div,
-.commentaire-box {
-  background: #f8fafc;
-  padding: 15px;
-  border-radius: 12px;
-}
-
-.detail-grid strong,
-.commentaire-box strong {
-  color: #64748b;
-  font-size: 14px;
-}
-
-.detail-grid p,
-.commentaire-box p {
-  margin-top: 8px;
-  font-weight: 600;
-}
-
-.commentaire-box {
-  margin-top: 20px;
+.action-buttons {
+  display: flex;
+  align-items: center;
+  gap: 8px;
 }
 
 .form-grid {
@@ -791,7 +739,8 @@ onMounted(async () => {
 
 .form-grid :deep(.p-inputtext),
 .form-grid :deep(.p-select),
-.form-grid :deep(.p-textarea) {
+.form-grid :deep(.p-textarea),
+.form-grid :deep(.p-datepicker) {
   width: 100%;
 }
 
@@ -799,72 +748,17 @@ onMounted(async () => {
   grid-column: 1 / -1;
 }
 
-.checkbox-line {
+.checkbox-line,
+.radio-item {
   display: flex;
   align-items: center;
   gap: 10px;
 }
 
-.form-grid :deep(.p-datepicker),
-.form-grid :deep(.p-inputtext),
-.form-grid :deep(.p-select),
-.form-grid :deep(.p-textarea) {
-    width: 100%;
-}
-
-.checkbox-line {
-    display: flex;
-    align-items: center;
-    gap: 10px;
-    margin-top: 10px;
-}
-
-.filters {
+.radio-group {
   display: flex;
-  margin-bottom: 24px;
-}
-
-.filters :deep(.p-inputtext) {
-  width: 420px;
-}
-
-.action-buttons {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-
-.courrier-preview {
-  padding: 28px 38px;
-  background: white;
-  color: #111827;
-  font-family: Georgia, 'Times New Roman', serif;
-  line-height: 1.7;
-  font-size: 17px;
-}
-
-.courrier-preview h2 {
-  text-align: center;
-  margin: 32px 0;
-  font-size: 24px;
-  letter-spacing: 1px;
-}
-
-.convocation-box {
-  margin: 28px 0;
-  padding: 20px;
-  border-radius: 12px;
-  background: #eef6ff;
-  text-align: center;
-}
-
-.convocation-box strong {
-  display: block;
-  font-size: 18px;
-  margin-bottom: 8px;
-}
-
-.convocation-box p {
-  margin: 0;
+  flex-direction: column;
+  gap: 15px;
+  margin-top: 10px;
 }
 </style>

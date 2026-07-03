@@ -8,6 +8,9 @@ import Button from 'primevue/button'
 import Dialog from 'primevue/dialog'
 import { useToast } from 'primevue/usetoast'
 import { useRouter } from 'vue-router'
+import Select from 'primevue/select'
+import Checkbox from 'primevue/checkbox'
+import Textarea from 'primevue/textarea'
 
 import api from '../services/api'
 
@@ -17,6 +20,8 @@ const router = useRouter()
 
 const showDialog = ref(false)
 const selectedAction = ref(null)
+const showEditDialog = ref(false)
+const actionForm = ref({})
 
 const loadActions = async () => {
   const response = await api.get('/actions', {
@@ -65,9 +70,6 @@ const traiterAction = async (action) => {
         motif: `Convocation suite au seuil de sanction pour ${action.nom_etudiant} ${action.prenom_etudiant}.`
       })
     )
-
-    router.push('/convocations')
-    return
   }
 
   await api.put(
@@ -93,6 +95,65 @@ const traiterAction = async (action) => {
     life: 3000
   })
 
+  await loadActions()
+}
+const modifierAction = (action) => {
+  actionForm.value = { ...action }
+  showEditDialog.value = true
+}
+
+const preparerCourrier = (action) => {
+
+  localStorage.setItem(
+    'courrier_prefill',
+    JSON.stringify({
+      id_dossier: action.id_dossier,
+      id_action: action.id_action,
+      niveau: action.niveau_alerte,
+      nom: action.nom_etudiant,
+      prenom: action.prenom_etudiant
+    })
+  )
+
+  router.push('/convocations')
+}
+
+const sauvegarderAction = async () => {
+  if (!actionForm.value.id_action) {
+    toast.add({
+      severity: 'error',
+      summary: 'Erreur',
+      detail: "ID de l'action introuvable.",
+      life: 3000
+    })
+    return
+  }
+
+  await api.put(
+    `/actions/${actionForm.value.id_action}`,
+    {
+      statut_action: actionForm.value.statut_action,
+      accuse_reception: actionForm.value.accuse_reception || false,
+      remise_main_propre: actionForm.value.remise_main_propre || false,
+      signature_action: actionForm.value.signature_action || false,
+      commentaire_action: actionForm.value.commentaire_action || '',
+      moyenEnvoi: actionForm.value.moyenEnvoi || ''
+    },
+    {
+      headers: {
+        Authorization: `Bearer ${localStorage.getItem('token')}`
+      }
+    }
+  )
+
+  toast.add({
+    severity: 'success',
+    summary: 'Succès',
+    detail: 'Action mise à jour.',
+    life: 3000
+  })
+
+  showEditDialog.value = false
   await loadActions()
 }
 
@@ -151,15 +212,15 @@ onMounted(loadActions)
       <Column header="Moyen d'envoi">
         <template #body="slotProps">
           <span v-if="slotProps.data.niveau_alerte === 'RAPPEL'">
-           Mail avec courier préalable
+           Mail par le Directeur des Etudes 
           </span>
 
           <span v-if="slotProps.data.niveau_alerte === 'AVERTISSEMENT'">
-            Courier recommanfé avec AR ou remise en main propre
+            Courier recommandé avec AR ou remise en main propre
           </span>
 
           <span v-if="slotProps.data.niveau_alerte === 'SANCTION'">
-           Lettre recommandée avec avis de réception
+           Lettre recommandée avec avis de réception / SAE
           </span>
         </template>
       </Column>
@@ -181,21 +242,40 @@ onMounted(loadActions)
 
       <Column header="Actions">
         <template #body="slotProps">
-          <Button
-            icon="pi pi-eye"
-            rounded
-            text
-            @click="voirAction(slotProps.data)"
-          />
+          <div class="action-buttons">
+            <Button
+              icon="pi pi-eye"
+              rounded
+              text
+              @click="voirAction(slotProps.data)"
+            />
+            <Button
+              
+              icon="pi pi-pencil"
+              rounded
+              text
+              severity="warning"
+              @click="modifierAction(slotProps.data)"
+            />
 
-          <Button
-            v-if="slotProps.data.statut_action === 'A_TRAITER'"
-            icon="pi pi-check"
-            severity="success"
-            rounded
-            text
-            @click="traiterAction(slotProps.data)"
-          />
+            <Button
+              v-if="slotProps.data.niveau_alerte !== 'SANCTION'"
+              icon="pi pi-file-edit"
+              rounded
+              text
+              severity="info"
+              @click="preparerCourrier(slotProps.data)"
+            />
+
+            <Button
+              v-if="slotProps.data.statut_action === 'A_TRAITER'"
+              icon="pi pi-check"
+              severity="success"
+              rounded
+              text
+              @click="traiterAction(slotProps.data)"
+            />
+          </div>
         </template>
       </Column>
     </DataTable>
@@ -278,6 +358,92 @@ onMounted(loadActions)
 
         </div>
     </Dialog>
+
+    <Dialog
+      v-model:visible="showEditDialog"
+      modal
+      header="Traiter le dossier administratif"
+      :style="{ width: '700px' }"
+    >
+    <div class="form-grid">
+      <div>
+        <label>Statut</label>
+        <Select
+          v-model="actionForm.statut_action"
+          :options="[
+            'A_TRAITER',
+            'EN_COURS',
+            'TERMINEE'
+          ]"
+        />
+      </div>
+
+      <div>
+        <label>Moyen d'envoi</label>
+
+        <Select
+            v-model="actionForm.moyenEnvoi"
+            :options="[
+              'Mail',
+              'Courrier recommandé avec AR',
+              'Remise en main propre'
+            ]"
+        />
+      </div>
+
+        <div>
+          <label>Accusé réception</label>
+
+          <Checkbox
+            v-model="actionForm.accuse_reception"
+            binary
+          />
+        </div>
+
+        <div>
+            <label>Remise main propre</label>
+
+            <Checkbox
+              v-model="actionForm.remise_main_propre"
+              binary
+            />
+        </div>
+
+        <div>
+          <label>Signature</label>
+
+          <Checkbox
+            v-model="actionForm.signature_action"
+            binary
+          />
+        </div>
+
+        <div class="full">
+          <label>Commentaire administratif</label>
+
+          <Textarea
+            v-model="actionForm.commentaire_action"
+            rows="4"
+          />
+        </div>
+      </div>
+
+    <template #footer>
+
+      <Button
+        label="Annuler"
+        outlined
+        @click="showEditDialog=false"
+      />
+
+      <Button
+        label="Enregistrer"
+        icon="pi pi-check"
+        @click="sauvegarderAction"
+      />
+
+    </template>
+  </Dialog>
 </template>
 
 <style scoped>
@@ -352,4 +518,35 @@ onMounted(loadActions)
     border-radius: 12px;
     background: #f8fafc;
 }
+
+.form-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 20px;
+}
+
+.form-grid label {
+  display: block;
+  margin-bottom: 8px;
+  font-weight: 600;
+  color: #334155;
+}
+
+.form-grid :deep(.p-inputtext),
+.form-grid :deep(.p-select),
+.form-grid :deep(.p-textarea) {
+  width: 100%;
+}
+
+.full {
+  grid-column: 1 / -1;
+}
+
+.action-buttons {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  white-space: nowrap;
+}
+
 </style>

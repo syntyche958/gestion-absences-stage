@@ -42,6 +42,9 @@ app.get('/', (req, res) => {
 
 const PORT = process.env.PORT || 3000;
 
+const notificationRoutes = require('./routes/notification.routes')
+app.use('/api/notifications', notificationRoutes)
+
 app.listen(PORT, () => {
   console.log(`Serveur lancé sur le port ${PORT}`);
 });
