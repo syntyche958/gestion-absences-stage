@@ -362,11 +362,13 @@ onMounted(loadDossiers)
       showClear
     />
 
-    <Button
+    <!-- <Button
       label="Exporter"
       icon="pi pi-download"
       outlined
     />
+    -->
+    
   </div>
 
   <div class="table-card">
