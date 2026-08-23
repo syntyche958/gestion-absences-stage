@@ -43,8 +43,8 @@ const routes = [
       },
 
       {
-        path: '/administration',
-        name: 'administration',
+        path: 'parametres',
+        name: 'parametres',
         component: () => import('../views/AdministrationView.vue')
       }
     ]

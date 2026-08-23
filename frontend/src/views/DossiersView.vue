@@ -56,10 +56,14 @@ const loadDossiers = async () => {
 }
 
 const notificationsParcours = computed(() => {
-  return getChronologieMetier()
+  if (!selectedStudent.value) {
+    return []
+  }
+
+  return getChronologieMetier(selectedStudent.value, actionsEtudiant.value)
     .filter(event => event.titre?.startsWith('Notification'))
     .map(event => ({
-      type_notif: event.titre.replace('Notification : ', ''),
+      type_notif: event.statut,
       message_notif: event.description,
       date_envoi: new Date()
     }))
@@ -79,7 +83,7 @@ const filteredDossiers = computed(() => {
 
     const matchGroupe =
       !groupe.value ||
-      dossier.groupe_td === groupe.value
+      (dossier.groupe_td || '').trim().toLowerCase() === groupe.value.trim().toLowerCase()
 
     return matchSearch && matchSemestre && matchGroupe
   })
@@ -177,11 +181,11 @@ const getChronologie = (etudiant) => {
   ]
 }
 
-const getChronologieMetier = () => {
+const getChronologieMetier = (etudiant, actions = []) => {
   const events = []
-  const total = Number(selectedStudent.value?.total_injustifiees || 0)
+  const total = Number(etudiant?.total_injustifiees || 0)
 
-  const actionsTriees = [...actionsEtudiant.value].sort(
+  const actionsTriees = [...actions].sort(
     (a, b) => Number(a.seuil || 0) - Number(b.seuil || 0)
   )
 
@@ -304,7 +308,6 @@ const voirEtudiant = async (etudiant) => {
         { headers }
       )
 
-      actionsEtudiant.value = actionsResponse.data
       convocationsEtudiant.value = convocationsResponse.data
       historiqueEtudiant.value = historiqueResponse.data
 
@@ -335,7 +338,7 @@ onMounted(loadDossiers)
 <template>
   <div class="page-header">
     <div>
-      <h1>Gestion des absences</h1>
+      <h1>Suivi des absences</h1>
       <p>Suivi détaillé des dossiers administratifs</p>
     </div>
   </div>
@@ -424,6 +427,8 @@ onMounted(loadDossiers)
                     icon="pi pi-eye"
                     rounded
                     text
+                    title = "Voir la fiche étudiant"
+                    v-tooltip.top="'Voir la fiche étudiant'"
                     @click="voirEtudiant(slotProps.data)"
                 />
             </template>
@@ -477,7 +482,7 @@ onMounted(loadDossiers)
           <h3>Chronologie administrative</h3>
 
           <div
-            v-if="selectedStudent && getChronologieMetier(selectedStudent).length === 0"
+            v-if="selectedStudent && getChronologieMetier(selectedStudent, actionsEtudiant).length === 0"
             class="empty-timeline"
           >
             Aucun événement administratif enregistré.
@@ -488,7 +493,7 @@ onMounted(loadDossiers)
             class="timeline-pro"
           >
             <div
-              v-for="event in getChronologieMetier()"
+              v-for="event in getChronologieMetier(selectedStudent, actionsEtudiant)"
               :key="event.titre"
               class="timeline-pro-item"
             >
@@ -576,53 +581,6 @@ onMounted(loadDossiers)
             </Column>
 
             <Column field="motif" header="Motif"/>
-        </DataTable>
-        <h3>Actions administratives</h3>
-        <DataTable
-          :value="actionsEtudiant"
-          :rows="5"
-          paginator
-          stripedRows
-        >
-          <Column field="type_action" header="Type" />
-          <Column field="moyenEnvoi" header="Moyen" />
-          <Column field="statut_action" header="Statut" />
-          <Column field="commentaire_action" header="Commentaire" />
-        </DataTable>
-
-        <h3>Convocations</h3>
-        <DataTable
-          :value="convocationsEtudiant"
-          :rows="5"
-          paginator
-          stripedRows
-        >
-          <Column header="Date">
-            <template #body="slotProps">
-              {{ formatDate(slotProps.data.date_heure) }}
-            </template>
-          </Column>
-
-          <Column field="statut_convoc" header="Statut" />
-          <Column field="motif" header="Motif" />
-          <Column field="commentaire_convoc" header="Commentaire" />
-        </DataTable>
-
-        <h3>Historique administratif</h3>
-        <DataTable
-          :value="historiqueEtudiant"
-          :rows="5"
-          paginator
-          stripedRows
-        >
-          <Column field="action_effectuee" header="Action" />
-          <Column field="description" header="Description" />
-
-          <Column header="Date">
-            <template #body="slotProps">
-              {{ formatDate(slotProps.data.date_action) }}
-            </template>
-          </Column>
         </DataTable>
     </Dialog>
 </template>

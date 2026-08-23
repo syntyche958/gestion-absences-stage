@@ -65,12 +65,12 @@ const logout = () => {
         <nav class="menu">
           <router-link to="/dashboard">
             <i class="pi pi-th-large"></i>
-            <span>Dashboard</span>
+            <span>Accueil</span>
           </router-link>
 
           <router-link to="/dossiers">
             <i class="pi pi-calendar"></i>
-            <span>Gestion des absences</span>
+            <span>Suivi des absences</span>
           </router-link>
 
           <router-link to="/actions">
@@ -86,6 +86,11 @@ const logout = () => {
           <router-link to="/historique">
             <i class="pi pi-bell"></i>
             <span>Historique</span>
+          </router-link>
+
+          <router-link to="/parametres">
+            <i class="pi pi-cog"></i>
+            <span>Paramètres</span>
           </router-link>
         </nav>
       </div>

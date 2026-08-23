@@ -47,7 +47,7 @@ onMounted(loadDashboard)
 <template>
   <div class="page-header">
     <div>
-      <h1>Dashboard</h1>
+      <h1>Accueil</h1>
       <p>Vue d'ensemble du suivi administratif des absences</p>
     </div>
 

@@ -99,7 +99,7 @@ const loadDossiers = async () => {
 
 const formatDate = (date) => {
   if (!date) return 'À planifier'
-  return new Date(date).toLocaleString('fr-FR')
+  return new Date(date).toLocaleDateString('fr-FR')
 }
 
 const extraireHeure = (date) => {
@@ -493,6 +493,8 @@ onMounted(async () => {
                 icon="pi pi-eye"
                 rounded
                 text
+                title="Ouvrir le courrier"
+                v-tooltip.top="'Ouvrir le courrier'"
                 @click="voirConvocation(slotProps.data)"
               />
 
@@ -500,6 +502,8 @@ onMounted(async () => {
                 icon="pi pi-pencil"
                 rounded
                 text
+                title="Préparer le courrier"
+                v-tooltip.top="'Préparer le courrier'"
                 severity="warning"
                 @click="ouvrirModification(slotProps.data)"
               />
@@ -509,6 +513,8 @@ onMounted(async () => {
                 icon="pi pi-send"
                 rounded
                 text
+                title="Envoyer le courrier"
+                v-tooltip.top="'Envoyer le courrier'"
                 severity="success"
                 @click="envoyerCourrier(slotProps.data)"
               />
@@ -517,6 +523,8 @@ onMounted(async () => {
                 icon="pi pi-trash"
                 rounded
                 text
+                title="Supprimer le courrier"
+                v-tooltip.top="'Supprimer le courrier'"
                 severity="danger"
                 @click="supprimerConvocation(slotProps.data)"
               />

@@ -247,6 +247,8 @@ onMounted(loadActions)
               icon="pi pi-eye"
               rounded
               text
+              title="Voir le détail"
+              v-tooltip.top="'Voir le détail'"
               @click="voirAction(slotProps.data)"
             />
             <Button
@@ -254,6 +256,8 @@ onMounted(loadActions)
               icon="pi pi-pencil"
               rounded
               text
+              title="Modifier l'action"
+              v-tooltip.top="'Modifier l\'action'"
               severity="warning"
               @click="modifierAction(slotProps.data)"
             />
@@ -263,6 +267,8 @@ onMounted(loadActions)
               icon="pi pi-file-edit"
               rounded
               text
+              title="Préparer un courrier"
+              v-tooltip.top="'Préparer un courrier'"
               severity="info"
               @click="preparerCourrier(slotProps.data)"
             />
@@ -273,6 +279,8 @@ onMounted(loadActions)
               severity="success"
               rounded
               text
+              title="Marquer comme traitée"
+              v-tooltip.top="'Marquer comme traitée'"
               @click="traiterAction(slotProps.data)"
             />
           </div>

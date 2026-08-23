@@ -8,6 +8,7 @@ import Aura from '@primeuix/themes/aura'
 import 'primeicons/primeicons.css'
 import ToastService from 'primevue/toastservice';
 import Toast from 'primevue/toast'
+import Tooltip from 'primevue/tooltip'
 
 const app = createApp(App)
 const pinia = createPinia();
@@ -22,5 +23,6 @@ app.use(PrimeVue, {
 
 app.use(ToastService)
 app.component('Toast', Toast)
+app.directive('tooltip', Tooltip)
 
 app.mount('#app')
